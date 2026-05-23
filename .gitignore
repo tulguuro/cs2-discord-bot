@@ -1,0 +1,39 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Runtime data (bot state)
+ratings.json
+banks.json
+debts.json
+channels.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.mp4
+
+# Claude Code session metadata
+.claude/
+
+# Local test/sim helpers — not needed in production
+simulate.py
+test_logic.py
+test.bat
