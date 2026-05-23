@@ -287,6 +287,46 @@ async def ratings_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+@bot.tree.command(name="banks",
+                  description="Энэ серверийн гишүүдийн бүртгэлтэй дансыг харах")
+async def banks_cmd(interaction: discord.Interaction):
+    if interaction.guild_id is None:
+        await interaction.response.send_message(
+            "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    guild = interaction.guild
+    # Зөвхөн энэ серверийн гишүүдийг харуулна (бусад server-н хувийн мэдээлэл
+    # харагдахгүй). _banks нь user-аар хадгалагдсан тул guild member-тэй
+    # таарвал л үзүүлнэ.
+    rows = []
+    for uid, ba in _banks.items():
+        if uid < 1_000_000:
+            continue  # хуурамч (devfill) тоглогчийг харуулахгүй
+        member = guild.get_member(uid)
+        if member is None:
+            continue
+        rows.append((member, ba))
+    if not rows:
+        await interaction.response.send_message(
+            "Энэ серверт бүртгэлтэй банкны данс алга. `/setbank`-аар эхэлнэ үү.")
+        return
+    # Гишүүний нэрээр эрэмбэлж
+    rows.sort(key=lambda r: r[0].display_name.lower())
+    lines = []
+    for i, (m, ba) in enumerate(rows, 1):
+        # `9796686318` хэлбэрээр copy боломжтой mono код
+        lines.append(f"`{i:>2}`  ▸  <@{m.id}>  ·  **{ba.bank}**  ·  "
+                     f"`{ba.number}`  ·  {ba.holder}")
+    embed = discord.Embed(
+        title="🏦  БАНКНЫ ДАНСНЫ ДЭВТЭР",
+        description="\n".join(lines),
+        color=FACEIT_ORANGE,
+    )
+    embed.set_author(name="⚡  CS2 · 5v5")
+    embed.set_footer(text=f"Нийт {len(rows)} гишүүн · бооцооны төлбөрт ашиглана")
+    await interaction.response.send_message(embed=embed)
+
+
 @bot.tree.command(name="setbank",
                   description="Банкны дансаа бүртгэх (admin/owner л бусдыг таглана)")
 @app_commands.describe(bank="Банкны нэр (ж: Хаан банк)",
