@@ -342,6 +342,107 @@ async def cleardata_cmd(interaction: discord.Interaction):
         ephemeral=True)
 
 
+# Restart-аас алдсан data-г screenshot-аас восстанавит хийх seed.
+# /restore owner-only командын дуудалтаар display_name match-р оноогдоно.
+_SEED_RATINGS = {
+    "Arigun4LiFE": 5.0,
+    "🅱🅴🅰🆂🆃🆉™": 4.8,
+    "🅸🅽🅰love you": 4.8,
+    "Manticore Narka": 4.8,
+    "itachi_uchiha8579": 4.7,
+    "Tushka": 4.5,
+    "Insaniti": 4.5,
+    "nam-ra": 4.2,
+    "cuT-": 4.0,
+    "-Yea ji-": 4.0,
+    "d0ucha.": 4.0,
+    "daidoo": 3.8,
+    "Tulguur": 3.6,
+    "#1 DALAI": 3.6,
+    "MxH.": 3.5,
+    "Bachka": 3.5,
+    "FroSty": 3.0,
+    "#1": 3.0,
+    "Balt12": 2.5,
+    "sanchir": 2.5,
+    "Wade": 2.0,
+    "Yoko": 2.0,
+    "🅼.🅾🅲🅴🅰🅽": 2.0,
+    "Geo": 2.0,
+    "Hisako": 1.5,
+    "Conqu": 1.5,
+    "Khobun": 1.5,
+    "Monzu": 1.5,
+    "mambosantii": 1.0,
+}
+
+_SEED_BANKS = {
+    # display_name → (bank, number, holder)
+    "Tulguur": ("Khan bank", "5015285982", "Tulguur"),
+    "Yoko": ("TDB", "416004206", "Yoko"),
+}
+
+
+@bot.tree.command(name="restore",
+                  description="[OWNER] Screenshot-аас алдсан rating/bank data-г сэргээх")
+async def restore_cmd(interaction: discord.Interaction):
+    """Display name match-р алдсан data-г сэргээнэ. Owner only."""
+    if OWNER_ID is None or interaction.user.id != OWNER_ID:
+        await interaction.response.send_message(
+            "Энэ команд нь зөвхөн bot-ын эзэнд зориулсан.",
+            ephemeral=True)
+        return
+    if interaction.guild_id is None:
+        await interaction.response.send_message(
+            "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    guild = interaction.guild
+    gr = guild_ratings(interaction.guild_id)
+    # Бүх member-уудыг fetch — Members Intent ажиллахгүй ч fetch chunk хийнэ.
+    try:
+        members = [m async for m in guild.fetch_members(limit=None)]
+    except discord.HTTPException:
+        members = list(guild.members)
+    # Display name ба global name хоёулангаар нь дахин дахин шалгана.
+    name_to_member = {}
+    for m in members:
+        name_to_member.setdefault(m.display_name, m)
+        if m.name and m.name not in name_to_member:
+            name_to_member[m.name] = m
+        if m.global_name and m.global_name not in name_to_member:
+            name_to_member[m.global_name] = m
+    matched_ratings = 0
+    unmatched_ratings = []
+    for name, rating in _SEED_RATINGS.items():
+        member = name_to_member.get(name)
+        if member is None:
+            unmatched_ratings.append(name)
+            continue
+        gr[member.id] = rating
+        matched_ratings += 1
+    matched_banks = 0
+    unmatched_banks = []
+    for name, (bank, number, holder) in _SEED_BANKS.items():
+        member = name_to_member.get(name)
+        if member is None:
+            unmatched_banks.append(name)
+            continue
+        _banks[member.id] = BankAccount(bank=bank, number=number, holder=holder)
+        matched_banks += 1
+    save_ratings()
+    save_banks()
+    msg = (f"✅ Сэргээлт дууслаа\n"
+           f"• Ratings: **{matched_ratings}/{len(_SEED_RATINGS)}** match\n"
+           f"• Banks: **{matched_banks}/{len(_SEED_BANKS)}** match\n")
+    if unmatched_ratings:
+        msg += f"\n❓ Ratings олдсонгүй ({len(unmatched_ratings)}): " \
+               f"`{', '.join(unmatched_ratings)}`"
+    if unmatched_banks:
+        msg += f"\n❓ Banks олдсонгүй: `{', '.join(unmatched_banks)}`"
+    await interaction.followup.send(msg, ephemeral=True)
+
+
 @bot.tree.command(name="banks",
                   description="Энэ серверийн гишүүдийн бүртгэлтэй дансыг харах")
 @app_commands.default_permissions(use_application_commands=True)
@@ -350,23 +451,10 @@ async def banks_cmd(interaction: discord.Interaction):
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
-    guild = interaction.guild
-    # Зөвхөн энэ серверийн гишүүдийг харуулна (бусад server-н хувийн мэдээлэл
-    # харагдахгүй). _banks нь user-аар хадгалагдсан тул guild member-тэй
-    # таарвал л үзүүлнэ. Members intent байхгүй бол cache хоосон болж
-    # болзошгүй тул fetch_member()-р шууд Discord API-аас уншина.
-    await interaction.response.defer()
-    rows = []
-    for uid, ba in _banks.items():
-        if uid < 1_000_000:
-            continue  # хуурамч (devfill) тоглогчийг харуулахгүй
-        member = guild.get_member(uid)
-        if member is None:
-            try:
-                member = await guild.fetch_member(uid)
-            except (discord.NotFound, discord.HTTPException):
-                continue
-        rows.append((member, ba))
+    # _banks нь user-аар хадгалагдсан global dict. fetch_member-ийн silent
+    # fail-ээс зайлсхийхийн тулд filter-гүйгээр бүгдийг харуулна — Discord
+    # client нь <@uid> mention-ийг автомат resolve хийдэг.
+    rows = [(uid, ba) for uid, ba in _banks.items() if uid >= 1_000_000]
     if not rows:
         await interaction.followup.send(
             "Энэ серверт бүртгэлтэй банкны данс алга. `/setbank`-аар эхэлнэ үү.")
