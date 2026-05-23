@@ -230,21 +230,13 @@ async def on_ready():
         debt_reminder.start()
 
 
-# Үнэлгээний сонголтууд: 0.5-аас 5.0 хүртэл 0.5-ийн алхамтай
-_RATING_CHOICES = [
-    app_commands.Choice(name=f"{v / 2}", value=v / 2)
-    for v in range(int(MIN_RATING * 2), int(MAX_RATING * 2) + 1)
-]
-
-
 @bot.tree.command(name="setrating",
                   description="Тоглогчид чадварын үнэлгээ (од) өгөх (admin/owner)")
 @app_commands.describe(member="Үнэлгээ өгөх гишүүн",
-                       stars="Одны үнэлгээ (0.5 – 5.0)")
-@app_commands.choices(stars=_RATING_CHOICES)
+                       stars="Одны үнэлгээ (0.1 – 5.0, жишээ: 1.1, 2.7, 4.8)")
 async def setrating(interaction: discord.Interaction,
                     member: discord.Member,
-                    stars: app_commands.Choice[float]):
+                    stars: app_commands.Range[float, 0.1, 5.0]):
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
@@ -254,18 +246,20 @@ async def setrating(interaction: discord.Interaction,
             "Зөвхөн server admin эсвэл bot owner үнэлгээ тавина.",
             ephemeral=True)
         return
-    guild_ratings(interaction.guild_id)[member.id] = stars.value
+    # 0.1 нарийвчлалд хязгаарлах (Discord 1.234... оруулсан тохиолдолд)
+    rating_value = round(stars * 10) / 10
+    guild_ratings(interaction.guild_id)[member.id] = rating_value
     save_ratings()
     # Идэвхтэй бүртгэлд тухайн хүн байвал үнэлгээг нь шинэчилж самбарыг сэргээнэ
     session = _sessions.get(interaction.guild_id)
     if session is not None:
         for p in session.all_joined:
             if p.id == member.id:
-                p.rating = stars.value
+                p.rating = rating_value
         await _edit_board(_boards.get(interaction.guild_id),
                           interaction.guild_id)
     await interaction.response.send_message(
-        f"✅ {member.mention} — **{stars.value}★** үнэлгээ авлаа.")
+        f"✅ {member.mention} — **{rating_value}★** үнэлгээ авлаа.")
 
 
 @bot.tree.command(name="ratings",
