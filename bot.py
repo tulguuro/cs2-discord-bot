@@ -287,6 +287,45 @@ async def ratings_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+@bot.tree.command(name="cleardata",
+                  description="[OWNER] Бүх rating/bank/debt/channel data-г устгах")
+async def cleardata_cmd(interaction: discord.Interaction):
+    """Bot-ийн in-memory state бүгдийг цэвэрлэж, json файлуудыг устгана.
+
+    Зөвхөн bot owner ашиглана. Бусад server-н data-д нөлөөлөхгүй —
+    бүх ledger/rating/bank/session устгана.
+    """
+    if OWNER_ID is None or interaction.user.id != OWNER_ID:
+        await interaction.response.send_message(
+            "Энэ команд нь зөвхөн bot-ын эзэнд зориулсан.",
+            ephemeral=True)
+        return
+    # In-memory state
+    _ratings.clear()
+    _banks.clear()
+    _ledgers.clear()
+    _reminder_channels.clear()
+    _sessions.clear()
+    _boards.clear()
+    _betting.clear()
+    _bet_boards.clear()
+    _match_times.clear()
+    # Disk
+    removed = []
+    for fp in (_RATINGS_FILE, _BANKS_FILE, _DEBTS_FILE, _CHANNELS_FILE):
+        if os.path.exists(fp):
+            try:
+                os.remove(fp)
+                removed.append(fp)
+            except OSError:
+                pass
+    await interaction.response.send_message(
+        f"🧹 Бүх data цэвэрлэгдлээ.\n"
+        f"Устгасан файлууд: `{', '.join(removed) or 'алга'}`\n"
+        f"In-memory state бас цэвэрхэн.",
+        ephemeral=True)
+
+
 @bot.tree.command(name="banks",
                   description="Энэ серверийн гишүүдийн бүртгэлтэй дансыг харах")
 async def banks_cmd(interaction: discord.Interaction):
