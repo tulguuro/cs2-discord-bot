@@ -8,6 +8,7 @@ assets/maps/ дотор газрын зураг байвал veto/ready карт
 import io
 import os
 import math
+import platform
 from PIL import Image, ImageDraw, ImageFont
 
 # ----- өнгө -----
@@ -29,6 +30,20 @@ RED    = (231, 76, 60)
 W = 900
 _ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 _FONTS = os.path.join(_ASSETS, "fonts")
+_IS_LINUX = platform.system() == "Linux"
+
+# Linux дээр Windows arialbd.ttf-ийг ачаалж чадавч зарим Cyrillic glyph
+# зөв унтахгүй (NexusHost болон бусад container Pillow build дээр ажиглагдсан).
+# DejaVu Sans Bold нь virtually бүх Linux distro дээр суусан, бүрэн Cyrillic
+# дэмжидэг учир Linux дээр түүнийг түрүүлж туршина.
+_LINUX_FALLBACKS = (
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    "DejaVuSans-Bold.ttf",
+    "LiberationSans-Bold.ttf",
+)
 
 _MAP_FILE = {
     "Ancient": "ancient", "Anubis": "anubis", "Dust II": "dust2",
@@ -39,20 +54,25 @@ _MAP_FILE = {
 
 
 def _f(name, size):
-    """Open a font from bundled assets/fonts/ first, then OS fallback.
+    """Cross-platform font loader for Cyrillic-safe rendering.
 
-    Bundled (e.g. arialbd.ttf) ships with the bot so Cyrillic Ү/Ө
-    render correctly on Linux containers that lack Arial Bold.
+    Windows: bundled arialbd.ttf (full Cyrillic).
+    Linux: prefer system DejaVu Sans Bold (full Cyrillic, always present);
+           fall back to bundled arialbd.ttf and Liberation Sans Bold.
+    Default: minimal PIL bitmap font.
     """
     bundled = os.path.join(_FONTS, name)
-    try:
-        return ImageFont.truetype(bundled, size)
-    except OSError:
-        pass
-    try:
-        return ImageFont.truetype(name, size)
-    except OSError:
-        return ImageFont.load_default()
+    candidates = (
+        list(_LINUX_FALLBACKS) + [bundled, name]
+        if _IS_LINUX
+        else [bundled, name]
+    )
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _tw(d, text, font):
