@@ -726,6 +726,46 @@ class MethodVoteView(discord.ui.View):
             return 2
         return None
 
+    def _resolve_voter(self, session, interaction):
+        """(captain_num, is_admin_override) буцаана.
+
+        Жинхэнэ ахлагч бол (1|2, False). admin/owner бөгөөд ахлагч биш
+        бол (1, True) — captain 1 болж саналаа өгөөд, нөгөөг автомат
+        нэгтгэнэ.
+        """
+        cap = self._captain_num(session, interaction.user.id)
+        if cap is not None:
+            return cap, False
+        if _is_admin(interaction):
+            return 1, True
+        return None, False
+
+    async def _vote_and_finalize(self, interaction, session, choice):
+        """Сонголтыг бүртгээд, хэрэгцээтэй бол нөгөө ахлагчийг автомат
+        нэгтгэнэ (admin override эсвэл fake captain тохиолдолд)."""
+        cap, is_override = self._resolve_voter(session, interaction)
+        if cap is None:
+            await interaction.response.send_message(
+                "Зөвхөн ахлагч (эсвэл admin/owner) хуваах аргыг сонгоно.",
+                ephemeral=True)
+            return None
+        try:
+            result = session.vote_method(cap, choice)
+        except ValueError as e:
+            await interaction.response.send_message(str(e), ephemeral=True)
+            return None
+        if result == "waiting":
+            other_num = 2 if cap == 1 else 1
+            other_cap = session.captain2 if cap == 1 else session.captain1
+            # admin override: автоматаар нөгөөтэй нэгтгэнэ
+            # fake captain: тест өгөгдлөөр автомат vote
+            if is_override or _is_fake(other_cap):
+                try:
+                    session.vote_method(other_num, choice)
+                except ValueError:
+                    pass
+        return "ok"
+
     @discord.ui.button(label="Draft", style=discord.ButtonStyle.secondary,
                        emoji="🎯")
     async def draft_btn(self, interaction: discord.Interaction, button):
@@ -734,15 +774,7 @@ class MethodVoteView(discord.ui.View):
             await interaction.response.send_message(
                 "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
             return
-        cap = self._captain_num(session, interaction.user.id)
-        if cap is None:
-            await interaction.response.send_message(
-                "Зөвхөн ахлагч хуваах аргыг сонгоно.", ephemeral=True)
-            return
-        try:
-            session.vote_method(cap, "draft")
-        except ValueError as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
+        if await self._vote_and_finalize(interaction, session, "draft") is None:
             return
         _auto_draft(session)
         await _refresh_and_check(interaction, self.guild_id)
@@ -755,22 +787,8 @@ class MethodVoteView(discord.ui.View):
             await interaction.response.send_message(
                 "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
             return
-        cap = self._captain_num(session, interaction.user.id)
-        if cap is None:
-            await interaction.response.send_message(
-                "Зөвхөн ахлагч хуваах аргыг сонгоно.", ephemeral=True)
+        if await self._vote_and_finalize(interaction, session, "random") is None:
             return
-        try:
-            result = session.vote_method(cap, "random")
-        except ValueError as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
-            return
-        # Нөгөө ахлагч тест (хуурамч) бол автоматаар санал нийлүүлнэ
-        if result == "waiting":
-            other_num = 2 if cap == 1 else 1
-            other_cap = session.captain2 if cap == 1 else session.captain1
-            if _is_fake(other_cap):
-                session.vote_method(other_num, "random")
         await _refresh_and_check(interaction, self.guild_id)
 
     @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary,
@@ -781,22 +799,8 @@ class MethodVoteView(discord.ui.View):
             await interaction.response.send_message(
                 "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
             return
-        cap = self._captain_num(session, interaction.user.id)
-        if cap is None:
-            await interaction.response.send_message(
-                "Зөвхөн ахлагч хуваах аргыг сонгоно.", ephemeral=True)
+        if await self._vote_and_finalize(interaction, session, "manual") is None:
             return
-        try:
-            result = session.vote_method(cap, "manual")
-        except ValueError as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
-            return
-        # Нөгөө ахлагч тест (хуурамч) бол автоматаар санал нийлүүлнэ
-        if result == "waiting":
-            other_num = 2 if cap == 1 else 1
-            other_cap = session.captain2 if cap == 1 else session.captain1
-            if _is_fake(other_cap):
-                session.vote_method(other_num, "manual")
         if session.division_method == "manual":
             _auto_manual(session)
         await _refresh_and_check(interaction, self.guild_id)
