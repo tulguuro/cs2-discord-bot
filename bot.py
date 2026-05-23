@@ -341,6 +341,7 @@ async def cleardata_cmd(interaction: discord.Interaction):
 
 @bot.tree.command(name="banks",
                   description="Энэ серверийн гишүүдийн бүртгэлтэй дансыг харах")
+@app_commands.default_permissions(use_application_commands=True)
 async def banks_cmd(interaction: discord.Interaction):
     if interaction.guild_id is None:
         await interaction.response.send_message(
@@ -381,6 +382,7 @@ async def banks_cmd(interaction: discord.Interaction):
 
 @bot.tree.command(name="setbank",
                   description="Банкны дансаа бүртгэх (admin/owner л бусдыг таглана)")
+@app_commands.default_permissions(use_application_commands=True)
 @app_commands.describe(bank="Банкны нэр (ж: Хаан банк)",
                        number="Дансны дугаар",
                        holder="Данс эзэмшигчийн нэр",
@@ -1879,6 +1881,7 @@ class DebtView(discord.ui.View):
 
 @bot.tree.command(name="debts",
                   description="Өрийн дэвтрийг харах ба өр барагдуулах")
+@app_commands.default_permissions(use_application_commands=True)
 async def debts_cmd(interaction: discord.Interaction):
     if interaction.guild_id is None:
         await interaction.response.send_message(
@@ -1974,6 +1977,7 @@ async def debt_reminder():
 
 @bot.tree.command(name="remind",
                   description="Өртэй хүмүүст сануулга шууд илгээх")
+@app_commands.default_permissions(use_application_commands=True)
 async def remind_cmd(interaction: discord.Interaction):
     if interaction.guild_id is None:
         await interaction.response.send_message(
