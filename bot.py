@@ -1878,10 +1878,27 @@ async def _send_debt_reminder(guild_id, channel):
         rows.append(f"{d.debtor.name[:12]:<12}  →  "
                     f"{d.creditor.name[:12]:<12}  {d.amount:>8,}₮")
     table = "```\n" + "\n".join(rows) + "\n```"
+    # Хүлээн авах талын (creditor) банкны дансыг нэгтгэж харуулна.
+    # Зөвхөн жинхэнэ Discord гишүүдийн (хуурамч биш) бүртгэлтэй дансыг гаргана.
+    bank_lines = []
+    seen = set()
+    for d in opens:
+        cid = d.creditor.id
+        if cid in seen or cid < 1_000_000:
+            continue
+        seen.add(cid)
+        ba = _banks.get(cid)
+        if ba is None:
+            continue
+        bank_lines.append(f"**{d.creditor.name}** — {ba.bank} · "
+                          f"`{ba.number}` · {ba.holder}")
+    desc = (random.choice(_REMINDER_INTROS) + "\n"
+            "Хэн хэнд өртэй вэ:\n" + table)
+    if bank_lines:
+        desc += "\n💳 **Хүлээн авах данс:**\n" + "\n".join(bank_lines)
     embed = discord.Embed(
         title="🔔  ӨРИЙН САНУУЛГА",
-        description=(random.choice(_REMINDER_INTROS) + "\n"
-                     "Хэн хэнд өртэй вэ:\n" + table),
+        description=desc,
         color=0xE6492D)
     embed.set_footer(text="Дэлгэрэнгүй ба барагдуулах:  /debts")
     mentions = " ".join(f"<@{i}>" for i in {d.debtor.id for d in opens}
