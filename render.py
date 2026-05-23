@@ -224,7 +224,55 @@ def _map_image(map_name, w, h):
 
 
 def _name(p, limit=15):
-    return p.name if len(p.name) <= limit else p.name[:limit - 1] + "…"
+    name = _sanitize_name(p.name)
+    return name if len(name) <= limit else name[:limit - 1] + "…"
+
+
+# Хатуу exotic Unicode тэмдэгтүүдийг ASCII/Latin/Cyrillic эквивалент болгоно.
+# Жишээ: "𓊈𒆜🅼.🅾🅲🅴🅰🅽𒆜𓊉" → "M.OCEAN"
+# Discord нэр дотор Egyptian hieroglyph, cuneiform, squared/circled Latin
+# зэрэг exotic codepoint байвал зөв render хийгдэхгүй, тиймээс түүнийг ASCII-руу
+# дамжуулна.
+_SQUARED_LATIN_TABLE = {
+    # Negative Squared Latin (U+1F170 — U+1F189)
+    "🅰": "A", "🅱": "B", "🅲": "C", "🅳": "D", "🅴": "E", "🅵": "F",
+    "🅶": "G", "🅷": "H", "🅸": "I", "🅹": "J", "🅺": "K", "🅻": "L",
+    "🅼": "M", "🅽": "N", "🅾": "O", "🅿": "P", "🆀": "Q", "🆁": "R",
+    "🆂": "S", "🆃": "T", "🆄": "U", "🆅": "V", "🆆": "W", "🆇": "X",
+    "🆈": "Y", "🆉": "Z",
+    # Mathematical Bold/Italic Latin (U+1D400 — нэлээд өргөн муж)
+    # Үндсэн чанаруудыг дараах NFKD normalize-ээр шийднэ
+}
+
+
+def _sanitize_name(name):
+    import unicodedata
+    if not name:
+        return ""
+    # 1) NFKD normalize — math/bold/italic/circled/squared Latin → ASCII
+    norm = unicodedata.normalize("NFKD", name)
+    # 2) Squared Latin табли (NFKD заримыг алгасдаг)
+    out = []
+    for ch in norm:
+        if ch in _SQUARED_LATIN_TABLE:
+            out.append(_SQUARED_LATIN_TABLE[ch])
+            continue
+        cp = ord(ch)
+        # 3) Combining mark-уудыг хасах (зүс задарсны үлдэгдэл)
+        if unicodedata.category(ch).startswith("M"):
+            continue
+        # 4) BMP-аас гарсан хатуу chars (Egyptian, Cuneiform, etc.) — хасах
+        if cp > 0xFFFF:
+            # Эмодзи, math symbols, hieroglyphs гэх мэт — таних боломжгүй
+            continue
+        # 5) Private Use Area, control, surrogate
+        cat = unicodedata.category(ch)
+        if cat in ("Cs", "Co", "Cc", "Cn"):
+            continue
+        out.append(ch)
+    cleaned = "".join(out).strip()
+    # 6) Хэрэв юу ч үлдээгүй бол placeholder
+    return cleaned or "???"
 
 
 def _prow(d, x0, x1, y, accent, player, is_cap):
