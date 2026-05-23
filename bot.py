@@ -294,33 +294,23 @@ async def ratings_cmd(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="setbank",
-                  description="Төлбөр хүлээн авах банкны дансаа бүртгэх")
+                  description="Төлбөр хүлээн авах өөрийнхөө банкны дансыг бүртгэх")
 @app_commands.describe(bank="Банкны нэр (ж: Хаан банк)",
                        number="Дансны дугаар",
-                       holder="Данс эзэмшигчийн нэр",
-                       member="(owner л) Бусдын дансыг бүртгэх гишүүн")
+                       holder="Данс эзэмшигчийн нэр")
 async def setbank(interaction: discord.Interaction,
-                  bank: str, number: str, holder: str,
-                  member: discord.Member = None):
+                  bank: str, number: str, holder: str):
+    # Хэн ч (owner/admin/user) ашиглаж болно — гэхдээ ЗӨВХӨН өөрийнхөө
+    # дансыг бүртгэх боломжтой. Бусдынхыг хэн ч таглаж бүртгэхгүй.
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
-    # Бусдын дансыг бүртгэх боломж — зөвхөн bot owner-д.
-    target = interaction.user
-    if member is not None and member.id != interaction.user.id:
-        if OWNER_ID is None or interaction.user.id != OWNER_ID:
-            await interaction.response.send_message(
-                "Зөвхөн bot owner бусдын дансыг бүртгэх боломжтой. "
-                "Та өөрийнхөө дансаа `/setbank` (member-гүй) ашиглаж бүртгээрэй.",
-                ephemeral=True)
-            return
-        target = member
-    _banks[target.id] = BankAccount(bank=bank, number=number, holder=holder)
+    _banks[interaction.user.id] = BankAccount(bank=bank, number=number,
+                                              holder=holder)
     save_banks()
-    whose = "Таны" if target.id == interaction.user.id else f"{target.display_name}-ны"
     await interaction.response.send_message(
-        f"✅ {whose} данс бүртгэгдлээ:\n**{_banks[target.id]}**\n"
+        f"✅ Таны данс бүртгэгдлээ:\n**{_banks[interaction.user.id]}**\n"
         "Бооцооны тооцоо хаах үед хожигдогчид энэ данс харагдана.",
         ephemeral=True)
 
