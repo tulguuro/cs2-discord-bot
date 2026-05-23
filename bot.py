@@ -42,11 +42,20 @@ GUILD_ID = os.getenv("GUILD_ID")
 _OWNER_RAW = os.getenv("OWNER_ID", "").strip()
 OWNER_ID = int(_OWNER_RAW) if _OWNER_RAW.isdigit() else None
 
+# JSONBin.io persistent storage. NexusHost-ийн ephemeral filesystem-аас
+# restart бүрд алга болохгүй гэж энд хадгална.
+JSONBIN_KEY = os.getenv("JSONBIN_KEY", "").strip()
+JSONBIN_BIN_ID = os.getenv("JSONBIN_BIN_ID", "").strip()
+_JSONBIN_BASE = "https://api.jsonbin.io/v3/b"
+
 # Үргэлж bot.py-н хавтсанд JSON файлуудыг хадгална
-# (cwd өөр газар байсан ч зөв хавтсыг ашиглана).
+# (cwd өөр газар байсан ч зөв хавтсыг ашиглана). JSONBin байхгүй
+# тохиолдолд fallback-р хэрэглэнэ.
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 print(f"[INIT] bot.py хавтас = {_BASE_DIR}")
 print(f"[INIT] cwd = {os.getcwd()}")
+print(f"[INIT] JSONBin key: {'байгаа' if JSONBIN_KEY else 'байхгүй'} "
+      f"| bin_id: {JSONBIN_BIN_ID or '(шинээр үүсгэнэ)'}")
 
 intents = discord.Intents.default()
 # Members intent шаардлагатай: guild.get_member(uid) ажиллахын тулд.
@@ -90,7 +99,7 @@ def load_ratings():
 
 
 def save_ratings():
-    """_ratings-ийг ratings.json-д бичнэ."""
+    """_ratings-ийг ratings.json-д + JSONBin-руу бичнэ."""
     try:
         with open(_RATINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(_ratings, f, ensure_ascii=False, indent=2)
@@ -98,6 +107,7 @@ def save_ratings():
               f"({sum(len(v) for v in _ratings.values())} entry)")
     except Exception as e:
         print(f"[АНХААР] ratings.json хадгалж чадсангүй: {e}")
+    schedule_save()
 
 
 load_ratings()
@@ -124,7 +134,7 @@ def load_banks():
 
 
 def save_banks():
-    """_banks-ийг banks.json-д бичнэ."""
+    """_banks-ийг banks.json-д + JSONBin-руу бичнэ."""
     try:
         data = {str(mid): {"bank": b.bank, "number": b.number,
                            "holder": b.holder}
@@ -134,6 +144,7 @@ def save_banks():
         print(f"[SAVE] banks → {_BANKS_FILE} ({len(_banks)} entry)")
     except Exception as e:
         print(f"[АНХААР] banks.json хадгалж чадсангүй: {e}")
+    schedule_save()
 
 
 # --- Өрийн дэвтэр (debts.json-д хадгалагдана) ---
@@ -183,6 +194,7 @@ def save_debts():
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[АНХААР] debts.json хадгалж чадсангүй: {e}")
+    schedule_save()
 
 
 # --- Сануулгын суваг (channels.json-д хадгалагдана) ---
@@ -213,11 +225,142 @@ def save_channels():
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[АНХААР] channels.json хадгалж чадсангүй: {e}")
+    schedule_save()
 
 
 load_banks()
 load_debts()
 load_channels()
+
+
+# ==================== JSONBin persistent storage ====================
+
+def _state_snapshot():
+    """In-memory state-аас JSONBin-руу хадгалах snapshot үүсгэх."""
+    return {
+        "ratings": {
+            str(g): {str(m): r for m, r in mems.items()}
+            for g, mems in _ratings.items()
+        },
+        "banks": {
+            str(m): {"bank": b.bank, "number": b.number, "holder": b.holder}
+            for m, b in _banks.items()
+        },
+        "debts": {
+            str(g): [{
+                "debtor_id": d.debtor.id,
+                "debtor_name": d.debtor.name,
+                "creditor_id": d.creditor.id,
+                "creditor_name": d.creditor.name,
+                "amount": d.amount,
+                "origin": d.origin,
+                "created": d.created,
+                "settled": d.settled,
+            } for d in led.debts]
+            for g, led in _ledgers.items()
+        },
+        "channels": {str(g): c for g, c in _reminder_channels.items()},
+    }
+
+
+def _restore_from_snapshot(data):
+    """JSONBin snapshot-аас in-memory state-руу буцаан унших."""
+    _ratings.clear()
+    _banks.clear()
+    _ledgers.clear()
+    _reminder_channels.clear()
+    for gid, mems in (data.get("ratings") or {}).items():
+        _ratings[int(gid)] = {int(m): float(r) for m, r in mems.items()}
+    for mid, b in (data.get("banks") or {}).items():
+        _banks[int(mid)] = BankAccount(b["bank"], b["number"], b["holder"])
+    for gid, items in (data.get("debts") or {}).items():
+        led = DebtLedger()
+        for it in items:
+            d = led.add(Player(it["debtor_id"], it["debtor_name"]),
+                        Player(it["creditor_id"], it["creditor_name"]),
+                        it["amount"], it.get("origin", ""),
+                        it.get("created", ""))
+            d.settled = it.get("settled", False)
+        _ledgers[int(gid)] = led
+    for gid, cid in (data.get("channels") or {}).items():
+        _reminder_channels[int(gid)] = int(cid)
+
+
+async def jsonbin_load():
+    """JSONBin-аас state-ыг ачаалж in-memory dict-руу restore хийнэ."""
+    global JSONBIN_BIN_ID
+    if not JSONBIN_KEY:
+        print("[JSONBIN] KEY байхгүй — file fallback ашиглана.")
+        return False
+    import aiohttp
+    headers = {"X-Master-Key": JSONBIN_KEY}
+    async with aiohttp.ClientSession() as session:
+        if JSONBIN_BIN_ID:
+            url = f"{_JSONBIN_BASE}/{JSONBIN_BIN_ID}/latest"
+            async with session.get(url, headers=headers) as resp:
+                if resp.status == 200:
+                    payload = await resp.json()
+                    _restore_from_snapshot(payload.get("record", {}))
+                    print(f"[JSONBIN] LOAD ✓ bin={JSONBIN_BIN_ID} "
+                          f"ratings={sum(len(v) for v in _ratings.values())} "
+                          f"banks={len(_banks)} "
+                          f"debts={sum(len(l.entries) for l in _ledgers.values())} "
+                          f"channels={len(_reminder_channels)}")
+                    return True
+                print(f"[JSONBIN] LOAD ✗ HTTP {resp.status}")
+                return False
+        # Bin id байхгүй → шинэ bin үүсгэнэ
+        initial = {"ratings": {}, "banks": {}, "debts": {}, "channels": {}}
+        post_headers = {**headers, "X-Bin-Private": "true",
+                        "X-Bin-Name": "cs2-bot-state",
+                        "Content-Type": "application/json"}
+        async with session.post(_JSONBIN_BASE, json=initial,
+                                 headers=post_headers) as resp:
+            if resp.status in (200, 201):
+                payload = await resp.json()
+                new_id = payload.get("metadata", {}).get("id")
+                if new_id:
+                    JSONBIN_BIN_ID = new_id
+                    print(f"[JSONBIN] CREATE ✓ Шинэ bin үүссэн: {new_id}")
+                    print(f"[JSONBIN] ⚠️ NexusHost-н env-руу нэмнэ үү:")
+                    print(f"[JSONBIN] JSONBIN_BIN_ID={new_id}")
+                    return True
+            print(f"[JSONBIN] CREATE ✗ HTTP {resp.status}")
+            return False
+
+
+async def jsonbin_save():
+    """In-memory state-ыг JSONBin-руу async хадгалах."""
+    if not JSONBIN_KEY or not JSONBIN_BIN_ID:
+        return
+    import aiohttp
+    headers = {"X-Master-Key": JSONBIN_KEY,
+               "Content-Type": "application/json"}
+    url = f"{_JSONBIN_BASE}/{JSONBIN_BIN_ID}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, json=_state_snapshot(),
+                                    headers=headers) as resp:
+                if resp.status != 200:
+                    print(f"[JSONBIN] SAVE ✗ HTTP {resp.status}")
+                else:
+                    n_ratings = sum(len(v) for v in _ratings.values())
+                    print(f"[JSONBIN] SAVE ✓ ratings={n_ratings} "
+                          f"banks={len(_banks)}")
+    except Exception as e:
+        print(f"[JSONBIN] SAVE алдаа: {e}")
+
+
+def schedule_save():
+    """Sync save_*() функцээс async jsonbin_save()-ыг fire-and-forget дуудна."""
+    if JSONBIN_KEY and JSONBIN_BIN_ID:
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(jsonbin_save())
+        except RuntimeError:
+            pass
 
 
 @bot.event
@@ -228,6 +371,11 @@ async def on_ready():
     Хэрэв байхгүй бол л global sync ашиглана (бүх серверт 1 цаг хүлээнэ).
     Дуплицат entry үүсэхээс зайлсхийхийн тулд хоёуланг нь зэрэг хийхгүй.
     """
+    # JSONBin-ээс state-ийг restart-аас дараа дахин ачаалах
+    try:
+        await jsonbin_load()
+    except Exception as e:
+        print(f"[JSONBIN] LOAD алдаа: {e}")
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
