@@ -197,15 +197,20 @@ load_channels()
 
 @bot.event
 async def on_ready():
-    """Бот холбогдоход slash командуудыг бүртгэнэ."""
+    """Бот холбогдоход slash командуудыг бүртгэнэ.
+
+    GUILD_ID байвал тухайн серверт шууд sync хийнэ (хорын дотор шинэчлэгдэнэ).
+    Үүнтэй зэрэгцээ global sync хийнэ — өөр серверүүдэд bot нэмэхэд commands
+    тэнд бас гарна (эхний удаа 1 цаг хүртэл шингээгдэх хугацаа авна).
+    """
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
             bot.tree.copy_global_to(guild=guild)
-            synced = await bot.tree.sync(guild=guild)
-        else:
-            synced = await bot.tree.sync()
-        print(f"[OK] {bot.user} онлайн боллоо — {len(synced)} команд бэлэн.")
+            guild_synced = await bot.tree.sync(guild=guild)
+            print(f"[OK] guild sync — {len(guild_synced)} команд (server: {GUILD_ID})")
+        global_synced = await bot.tree.sync()
+        print(f"[OK] {bot.user} онлайн боллоо — {len(global_synced)} команд бэлэн.")
     except Exception as e:
         print(f"[АЛДАА] Командыг sync хийж чадсангүй: {e}")
     if not debt_reminder.is_running():
