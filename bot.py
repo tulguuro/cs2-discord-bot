@@ -42,6 +42,12 @@ GUILD_ID = os.getenv("GUILD_ID")
 _OWNER_RAW = os.getenv("OWNER_ID", "").strip()
 OWNER_ID = int(_OWNER_RAW) if _OWNER_RAW.isdigit() else None
 
+# Үргэлж bot.py-н хавтсанд JSON файлуудыг хадгална
+# (cwd өөр газар байсан ч зөв хавтсыг ашиглана).
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+print(f"[INIT] bot.py хавтас = {_BASE_DIR}")
+print(f"[INIT] cwd = {os.getcwd()}")
+
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -59,7 +65,7 @@ def _is_admin(interaction):
 # --- Чадварын үнэлгээ (ratings.json-д байнга хадгалагдана) ---
 # {guild_id: {member_id: rating}}
 _ratings = {}
-_RATINGS_FILE = "ratings.json"
+_RATINGS_FILE = os.path.join(_BASE_DIR, "ratings.json")
 
 
 def guild_ratings(guild_id):
@@ -85,6 +91,8 @@ def save_ratings():
     try:
         with open(_RATINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(_ratings, f, ensure_ascii=False, indent=2)
+        print(f"[SAVE] ratings → {_RATINGS_FILE} "
+              f"({sum(len(v) for v in _ratings.values())} entry)")
     except Exception as e:
         print(f"[АНХААР] ratings.json хадгалж чадсангүй: {e}")
 
@@ -95,7 +103,7 @@ load_ratings()
 # --- Банкны данс (banks.json-д хадгалагдана) ---
 # {member_id: BankAccount}
 _banks = {}
-_BANKS_FILE = "banks.json"
+_BANKS_FILE = os.path.join(_BASE_DIR, "banks.json")
 
 
 def load_banks():
@@ -120,6 +128,7 @@ def save_banks():
                 for mid, b in _banks.items()}
         with open(_BANKS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"[SAVE] banks → {_BANKS_FILE} ({len(_banks)} entry)")
     except Exception as e:
         print(f"[АНХААР] banks.json хадгалж чадсангүй: {e}")
 
@@ -127,7 +136,7 @@ def save_banks():
 # --- Өрийн дэвтэр (debts.json-д хадгалагдана) ---
 # {guild_id: DebtLedger}
 _ledgers = {}
-_DEBTS_FILE = "debts.json"
+_DEBTS_FILE = os.path.join(_BASE_DIR, "debts.json")
 
 
 def guild_ledger(guild_id):
@@ -176,7 +185,7 @@ def save_debts():
 # --- Сануулгын суваг (channels.json-д хадгалагдана) ---
 # {guild_id: channel_id} — өдрийн өр сануулга илгээх суваг
 _reminder_channels = {}
-_CHANNELS_FILE = "channels.json"
+_CHANNELS_FILE = os.path.join(_BASE_DIR, "channels.json")
 
 
 def load_channels():
@@ -212,18 +221,22 @@ load_channels()
 async def on_ready():
     """Бот холбогдоход slash командуудыг бүртгэнэ.
 
-    GUILD_ID байвал тухайн серверт шууд sync хийнэ (хорын дотор шинэчлэгдэнэ).
-    Үүнтэй зэрэгцээ global sync хийнэ — өөр серверүүдэд bot нэмэхэд commands
-    тэнд бас гарна (эхний удаа 1 цаг хүртэл шингээгдэх хугацаа авна).
+    GUILD_ID байвал тухайн серверт ШУУД sync хийнэ (хормын дотор гарна).
+    Хэрэв байхгүй бол л global sync ашиглана (бүх серверт 1 цаг хүлээнэ).
+    Дуплицат entry үүсэхээс зайлсхийхийн тулд хоёуланг нь зэрэг хийхгүй.
     """
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
             bot.tree.copy_global_to(guild=guild)
             guild_synced = await bot.tree.sync(guild=guild)
-            print(f"[OK] guild sync — {len(guild_synced)} команд (server: {GUILD_ID})")
-        global_synced = await bot.tree.sync()
-        print(f"[OK] {bot.user} онлайн боллоо — {len(global_synced)} команд бэлэн.")
+            print(f"[OK] guild sync — {len(guild_synced)} команд "
+                  f"(server: {GUILD_ID})")
+            print(f"[OK] {bot.user} онлайн боллоо.")
+        else:
+            global_synced = await bot.tree.sync()
+            print(f"[OK] {bot.user} онлайн боллоо — "
+                  f"{len(global_synced)} команд бэлэн (global).")
     except Exception as e:
         print(f"[АЛДАА] Командыг sync хийж чадсангүй: {e}")
     if not debt_reminder.is_running():
