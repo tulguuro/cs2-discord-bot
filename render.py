@@ -37,10 +37,19 @@ _IS_LINUX = platform.system() == "Linux"
 # DejaVu Sans Bold нь virtually бүх Linux distro дээр суусан, бүрэн Cyrillic
 # дэмжидэг учир Linux дээр түүнийг түрүүлж туршина.
 _LINUX_FALLBACKS = (
+    # Noto Sans CJK — best CJK/Unicode coverage (Japanese, Korean, Chinese)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/google-noto-cjk-fonts/NotoSansCJK-Bold.ttc",
+    # DejaVu Sans Bold — present on most Linux distros, full Cyrillic
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    # Liberation Sans Bold (RedHat/Fedora alternative)
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    # Name-only fallbacks
+    "NotoSansCJK-Bold.ttc",
     "DejaVuSans-Bold.ttf",
     "LiberationSans-Bold.ttf",
 )
@@ -82,6 +91,16 @@ def _tw(d, text, font):
 
 def _ct(d, cx, y, text, font, fill):
     d.text((cx - _tw(d, text, font) / 2, y), text, font=font, fill=fill)
+
+
+def _fit(d, text, font, max_width):
+    """Текстийг max_width-д багтаах хэлбэрээр зүсж, нэмэх ёстой бол … тавьна."""
+    if _tw(d, text, font) <= max_width:
+        return text
+    ell = "…"
+    while text and _tw(d, text + ell, font) > max_width:
+        text = text[:-1]
+    return (text + ell) if text else ell
 
 
 def _star(d, cx, cy, r, fill):
@@ -542,6 +561,11 @@ def render_betting(rnd, banks, mt=None):
     fn = _f("arialbd.ttf", 31)
     fa = _f("arialbd.ttf", 33)
     fs = _f("arialbd.ttf", 21)
+    # Төв хэсгийн "30,000₮" хэдэн пиксел эзэлж болохыг хэмжээд, тал бүрт
+    # үлдсэн зайд нэрсийг автомат тааруулна.
+    sample_amt = f"{rnd.bets[0].amount:,}₮" if rnd.bets else "30,000₮"
+    amt_half = _tw(d, sample_amt, fa) / 2
+    name_max_w = int(W / 2 - amt_half - 218)  # 194 (start) + 24 padding
     y = top
     for bet in rnd.bets:
         a, b = bet.player_a, bet.player_b
@@ -554,11 +578,12 @@ def render_betting(rnd, banks, mt=None):
         _person(d, 128, y + 52, 32, ORANGE if a_col == WHITE else SUB)
         if a_win:
             _star(d, 170, y + 42, 12, GOLD)
-        d.text((194, y + 34), _name(a, 14), font=fn, fill=a_col)
+        an = _fit(d, _name(a, 14), fn, name_max_w)
+        d.text((194, y + 34), an, font=fn, fill=a_col)
         _person(d, W - 128, y + 52, 32, BLUE if b_col == WHITE else SUB)
         if b_win:
             _star(d, W - 170, y + 42, 12, GOLD)
-        bn = _name(b, 14)
+        bn = _fit(d, _name(b, 14), fn, name_max_w)
         d.text((W - 194 - _tw(d, bn, fn), y + 34), bn, font=fn, fill=b_col)
         amt = f"{bet.amount:,}₮"
         _ct(d, W / 2, y + 22, amt, fa, GOLD)
