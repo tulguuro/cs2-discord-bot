@@ -238,7 +238,7 @@ _RATING_CHOICES = [
 
 
 @bot.tree.command(name="setrating",
-                  description="Тоглогчид чадварын үнэлгээ (од) өгөх")
+                  description="Тоглогчид чадварын үнэлгээ (од) өгөх (admin/owner)")
 @app_commands.describe(member="Үнэлгээ өгөх гишүүн",
                        stars="Одны үнэлгээ (0.5 – 5.0)")
 @app_commands.choices(stars=_RATING_CHOICES)
@@ -248,6 +248,11 @@ async def setrating(interaction: discord.Interaction,
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    if not _is_admin(interaction):
+        await interaction.response.send_message(
+            "Зөвхөн server admin эсвэл bot owner үнэлгээ тавина.",
+            ephemeral=True)
         return
     guild_ratings(interaction.guild_id)[member.id] = stars.value
     save_ratings()
@@ -292,18 +297,30 @@ async def ratings_cmd(interaction: discord.Interaction):
                   description="Төлбөр хүлээн авах банкны дансаа бүртгэх")
 @app_commands.describe(bank="Банкны нэр (ж: Хаан банк)",
                        number="Дансны дугаар",
-                       holder="Данс эзэмшигчийн нэр")
+                       holder="Данс эзэмшигчийн нэр",
+                       member="(owner л) Бусдын дансыг бүртгэх гишүүн")
 async def setbank(interaction: discord.Interaction,
-                  bank: str, number: str, holder: str):
+                  bank: str, number: str, holder: str,
+                  member: discord.Member = None):
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
-    _banks[interaction.user.id] = BankAccount(bank=bank, number=number,
-                                              holder=holder)
+    # Бусдын дансыг бүртгэх боломж — зөвхөн bot owner-д.
+    target = interaction.user
+    if member is not None and member.id != interaction.user.id:
+        if OWNER_ID is None or interaction.user.id != OWNER_ID:
+            await interaction.response.send_message(
+                "Зөвхөн bot owner бусдын дансыг бүртгэх боломжтой. "
+                "Та өөрийнхөө дансаа `/setbank` (member-гүй) ашиглаж бүртгээрэй.",
+                ephemeral=True)
+            return
+        target = member
+    _banks[target.id] = BankAccount(bank=bank, number=number, holder=holder)
     save_banks()
+    whose = "Таны" if target.id == interaction.user.id else f"{target.display_name}-ны"
     await interaction.response.send_message(
-        f"✅ Таны данс бүртгэгдлээ:\n**{_banks[interaction.user.id]}**\n"
+        f"✅ {whose} данс бүртгэгдлээ:\n**{_banks[target.id]}**\n"
         "Бооцооны тооцоо хаах үед хожигдогчид энэ данс харагдана.",
         ephemeral=True)
 
@@ -1822,15 +1839,11 @@ async def debt_reminder():
 
 
 @bot.tree.command(name="remind",
-                  description="Өртэй хүмүүст сануулга шууд илгээх (admin)")
+                  description="Өртэй хүмүүст сануулга шууд илгээх")
 async def remind_cmd(interaction: discord.Interaction):
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
-        return
-    if not _is_admin(interaction):
-        await interaction.response.send_message(
-            "Зөвхөн admin сануулга илгээнэ.", ephemeral=True)
         return
     _reminder_channels[interaction.guild_id] = interaction.channel_id
     save_channels()
