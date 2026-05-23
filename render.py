@@ -362,12 +362,28 @@ def render_manual(session, mt=None):
     yb2 = _player_col(d, 462, W - 70, 448, BLUE, m.team2.players, cap2)
     y = max(yb1, yb2) + 16
     if m.unassigned:
-        pool = "   ·   ".join(f"{_name(p, 10)} {p.rating}"
-                              for p in sorted(m.unassigned,
-                                              key=lambda x: -x.rating))
         _ct(d, W / 2, y, f"ХУВААРИЛААГҮЙ  ({len(m.unassigned)})",
             _f("arialbd.ttf", 24), SUB)
-        _ct(d, W / 2, y + 36, pool, _f("arialbd.ttf", 22), DIM)
+        # Урт жагсаалтыг олон мөрөнд гаргана (canvas-аас гарахгүй).
+        font_pool = _f("arialbd.ttf", 22)
+        sep = "   ·   "
+        max_w = W - 140
+        items = [f"{_name(p, 10)} {p.rating}"
+                 for p in sorted(m.unassigned, key=lambda x: -x.rating)]
+        lines, cur, cur_w = [], [], 0
+        sep_w = _tw(d, sep, font_pool)
+        for it in items:
+            w = _tw(d, it, font_pool)
+            if cur and cur_w + sep_w + w > max_w:
+                lines.append(sep.join(cur))
+                cur, cur_w = [it], w
+            else:
+                cur_w += (sep_w if cur else 0) + w
+                cur.append(it)
+        if cur:
+            lines.append(sep.join(cur))
+        for i, line in enumerate(lines):
+            _ct(d, W / 2, y + 36 + i * 32, line, font_pool, DIM)
     else:
         _ct(d, W / 2, y, "БҮХ ТОГЛОГЧ ХУВААРИЛАГДЛАА — БАТАЛГААЖУУЛНА",
             _f("arialbd.ttf", 25), GREEN)
