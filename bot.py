@@ -294,23 +294,35 @@ async def ratings_cmd(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="setbank",
-                  description="Төлбөр хүлээн авах өөрийнхөө банкны дансыг бүртгэх")
+                  description="Банкны дансаа бүртгэх (admin/owner л бусдыг таглана)")
 @app_commands.describe(bank="Банкны нэр (ж: Хаан банк)",
                        number="Дансны дугаар",
-                       holder="Данс эзэмшигчийн нэр")
+                       holder="Данс эзэмшигчийн нэр",
+                       member="(admin/owner л) Бусдын дансыг бүртгэх гишүүн")
 async def setbank(interaction: discord.Interaction,
-                  bank: str, number: str, holder: str):
-    # Хэн ч (owner/admin/user) ашиглаж болно — гэхдээ ЗӨВХӨН өөрийнхөө
-    # дансыг бүртгэх боломжтой. Бусдынхыг хэн ч таглаж бүртгэхгүй.
+                  bank: str, number: str, holder: str,
+                  member: discord.Member = None):
+    # Owner + admin: @member оруулаад бусдын дансыг бүртгэж болно.
+    # Энгийн user: зөвхөн өөрийнхөө дансыг (member үл оруулна, эсвэл өөрийгөө).
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
-    _banks[interaction.user.id] = BankAccount(bank=bank, number=number,
-                                              holder=holder)
+    target = interaction.user
+    if member is not None and member.id != interaction.user.id:
+        if not _is_admin(interaction):
+            await interaction.response.send_message(
+                "Зөвхөн server admin эсвэл bot owner бусдын дансыг бүртгэнэ. "
+                "Та өөрийнхөө дансыг `@member` оруулахгүйгээр бүртгээрэй.",
+                ephemeral=True)
+            return
+        target = member
+    _banks[target.id] = BankAccount(bank=bank, number=number, holder=holder)
     save_banks()
+    whose = ("Таны" if target.id == interaction.user.id
+             else f"{target.display_name}-ны")
     await interaction.response.send_message(
-        f"✅ Таны данс бүртгэгдлээ:\n**{_banks[interaction.user.id]}**\n"
+        f"✅ {whose} данс бүртгэгдлээ:\n**{_banks[target.id]}**\n"
         "Бооцооны тооцоо хаах үед хожигдогчид энэ данс харагдана.",
         ephemeral=True)
 
