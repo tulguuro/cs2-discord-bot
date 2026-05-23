@@ -610,6 +610,12 @@ async def matchprep(interaction: discord.Interaction):
                   description="[ТЕСТ] Бүртгэлийг хуурамч тоглогчоор дүүргэх")
 @app_commands.describe(count="Нэмэх хуурамч тоглогчийн тоо")
 async def devfill(interaction: discord.Interaction, count: int = 12):
+    # Зөвхөн bot owner ашиглах боломжтой (server admin ч хэрэглэх боломжгүй).
+    if OWNER_ID is None or interaction.user.id != OWNER_ID:
+        await interaction.response.send_message(
+            "Энэ команд нь зөвхөн bot-ын эзэнд зориулсан тест команд.",
+            ephemeral=True)
+        return
     session = _sessions.get(interaction.guild_id)
     if session is None:
         await interaction.response.send_message(
