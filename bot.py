@@ -49,6 +49,9 @@ print(f"[INIT] bot.py хавтас = {_BASE_DIR}")
 print(f"[INIT] cwd = {os.getcwd()}")
 
 intents = discord.Intents.default()
+# Members intent шаардлагатай: guild.get_member(uid) ажиллахын тулд.
+# Discord developer portal → Bot → "Server Members Intent" toggle ON хийнэ үү.
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -350,17 +353,22 @@ async def banks_cmd(interaction: discord.Interaction):
     guild = interaction.guild
     # Зөвхөн энэ серверийн гишүүдийг харуулна (бусад server-н хувийн мэдээлэл
     # харагдахгүй). _banks нь user-аар хадгалагдсан тул guild member-тэй
-    # таарвал л үзүүлнэ.
+    # таарвал л үзүүлнэ. Members intent байхгүй бол cache хоосон болж
+    # болзошгүй тул fetch_member()-р шууд Discord API-аас уншина.
+    await interaction.response.defer()
     rows = []
     for uid, ba in _banks.items():
         if uid < 1_000_000:
             continue  # хуурамч (devfill) тоглогчийг харуулахгүй
         member = guild.get_member(uid)
         if member is None:
-            continue
+            try:
+                member = await guild.fetch_member(uid)
+            except (discord.NotFound, discord.HTTPException):
+                continue
         rows.append((member, ba))
     if not rows:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Энэ серверт бүртгэлтэй банкны данс алга. `/setbank`-аар эхэлнэ үү.")
         return
     # Гишүүний нэрээр эрэмбэлж
@@ -377,7 +385,7 @@ async def banks_cmd(interaction: discord.Interaction):
     )
     embed.set_author(name="⚡  CS2 · 5v5")
     embed.set_footer(text=f"Нийт {len(rows)} гишүүн · бооцооны төлбөрт ашиглана")
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 @bot.tree.command(name="setbank",
