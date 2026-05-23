@@ -593,11 +593,17 @@ class RegistrationView(discord.ui.View):
             view=SwapView(self.guild_id), ephemeral=True)
 
 
-@bot.tree.command(name="matchprep", description="Шинэ тоглолтын бүртгэл нээх")
+@bot.tree.command(name="matchprep",
+                  description="Шинэ тоглолтын бүртгэл нээх (admin/owner)")
 async def matchprep(interaction: discord.Interaction):
     if interaction.guild_id is None:
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    if not _is_admin(interaction):
+        await interaction.response.send_message(
+            "Зөвхөн server admin эсвэл bot owner шинэ тоглолт нээнэ.",
+            ephemeral=True)
         return
     # Хуучин самбар байвал товчнуудыг идэвхгүй болгож, будлиан гаргахгүй
     old_board = _boards.get(interaction.guild_id)
