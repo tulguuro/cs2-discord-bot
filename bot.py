@@ -39,9 +39,22 @@ if hasattr(sys.stdout, "reconfigure"):
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
+_OWNER_RAW = os.getenv("OWNER_ID", "").strip()
+OWNER_ID = int(_OWNER_RAW) if _OWNER_RAW.isdigit() else None
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+def _is_admin(interaction):
+    """Bot owner эсвэл server administrator/manage_guild эрхтэй эсэхийг шалгана.
+
+    OWNER_ID env var-аар тохирсон bot эзэн нь ямар ч server-т админ эрхтэй.
+    """
+    if OWNER_ID is not None and interaction.user.id == OWNER_ID:
+        return True
+    perms = getattr(interaction.user, "guild_permissions", None)
+    return perms is not None and (perms.administrator or perms.manage_guild)
 
 # --- Чадварын үнэлгээ (ratings.json-д байнга хадгалагдана) ---
 # {guild_id: {member_id: rating}}
@@ -524,9 +537,7 @@ class RegistrationView(discord.ui.View):
             await interaction.response.send_message(
                 "Энэ бүртгэл идэвхгүй болсон.", ephemeral=True)
             return
-        perms = getattr(interaction.user, "guild_permissions", None)
-        is_admin = perms is not None and (perms.administrator
-                                          or perms.manage_guild)
+        is_admin = _is_admin(interaction)
         if not (is_admin or _is_top_player(session, interaction.user.id)):
             await interaction.response.send_message(
                 "Зөвхөн admin эсвэл хамгийн өндөр үнэлгээтэй тоглогч "
@@ -547,9 +558,7 @@ class RegistrationView(discord.ui.View):
             await interaction.response.send_message(
                 "Энэ бүртгэл идэвхгүй болсон.", ephemeral=True)
             return
-        perms = getattr(interaction.user, "guild_permissions", None)
-        is_admin = perms is not None and (perms.administrator
-                                          or perms.manage_guild)
+        is_admin = _is_admin(interaction)
         if not (is_admin or _is_top_player(session, interaction.user.id)):
             await interaction.response.send_message(
                 "Зөвхөн admin эсвэл хамгийн өндөр үнэлгээтэй тоглогч "
@@ -1425,8 +1434,7 @@ async def _post_betting_board(interaction, guild_id):
 
 def _can_record_result(interaction):
     """Хэрэглэгч үр дүн оруулах эрхтэй эсэх (admin эсвэл ахлагч)."""
-    perms = getattr(interaction.user, "guild_permissions", None)
-    if perms is not None and (perms.administrator or perms.manage_guild):
+    if _is_admin(interaction):
         return True
     session = _sessions.get(interaction.guild_id)
     return session is not None and _is_captain_user(session,
@@ -1713,9 +1721,7 @@ class DebtSettleSelect(discord.ui.Select):
             await interaction.response.send_message(
                 "Энэ өр аль хэдийн барагдсан.", ephemeral=True)
             return
-        perms = getattr(interaction.user, "guild_permissions", None)
-        is_admin = perms is not None and (perms.administrator
-                                          or perms.manage_guild)
+        is_admin = _is_admin(interaction)
         if not (interaction.user.id == debt.creditor.id or is_admin):
             await interaction.response.send_message(
                 f"Зөвхөн авлагатай хүн ({_who(debt.creditor)}) эсвэл admin "
@@ -1816,8 +1822,7 @@ async def remind_cmd(interaction: discord.Interaction):
         await interaction.response.send_message(
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
-    perms = getattr(interaction.user, "guild_permissions", None)
-    if not (perms is not None and (perms.administrator or perms.manage_guild)):
+    if not _is_admin(interaction):
         await interaction.response.send_message(
             "Зөвхөн admin сануулга илгээнэ.", ephemeral=True)
         return
