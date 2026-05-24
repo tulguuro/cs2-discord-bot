@@ -304,7 +304,7 @@ async def jsonbin_load():
                     print(f"[JSONBIN] LOAD ✓ bin={JSONBIN_BIN_ID} "
                           f"ratings={sum(len(v) for v in _ratings.values())} "
                           f"banks={len(_banks)} "
-                          f"debts={sum(len(l.entries) for l in _ledgers.values())} "
+                          f"debts={sum(len(l.debts) for l in _ledgers.values())} "
                           f"channels={len(_reminder_channels)}")
                     return True
                 print(f"[JSONBIN] LOAD ✗ HTTP {resp.status}")
