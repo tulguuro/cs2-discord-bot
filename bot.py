@@ -381,8 +381,10 @@ async def on_ready():
             guild = discord.Object(id=int(GUILD_ID))
             bot.tree.copy_global_to(guild=guild)
             guild_synced = await bot.tree.sync(guild=guild)
+            cmd_names = ", ".join(sorted(c.name for c in guild_synced))
             print(f"[OK] guild sync — {len(guild_synced)} команд "
                   f"(server: {GUILD_ID})")
+            print(f"[OK] commands: {cmd_names}")
             print(f"[OK] {bot.user} онлайн боллоо.")
         else:
             global_synced = await bot.tree.sync()
@@ -453,6 +455,7 @@ async def ratings_cmd(interaction: discord.Interaction):
 
 @bot.tree.command(name="cleardata",
                   description="[OWNER] Бүх rating/bank/debt/channel data-г устгах")
+@app_commands.default_permissions(administrator=True)
 async def cleardata_cmd(interaction: discord.Interaction):
     """Bot-ийн in-memory state бүгдийг цэвэрлэж, json файлуудыг устгана.
 
@@ -533,6 +536,7 @@ _SEED_BANKS = {
 
 @bot.tree.command(name="restore",
                   description="[OWNER] Screenshot-аас алдсан rating/bank data-г сэргээх")
+@app_commands.default_permissions(administrator=True)
 async def restore_cmd(interaction: discord.Interaction):
     """Display name match-р алдсан data-г сэргээнэ. Owner only."""
     if OWNER_ID is None or interaction.user.id != OWNER_ID:
