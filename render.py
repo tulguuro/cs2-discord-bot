@@ -606,14 +606,14 @@ def render_betting(rnd, banks, mt=None):
            fill=BLUE)
     d.line([112, hy + 54, 440, hy + 54], fill=ORANGE, width=3)
     d.line([W - 440, hy + 54, W - 112, hy + 54], fill=BLUE, width=3)
-    fn = _f("arialbd.ttf", 31)
-    fa = _f("arialbd.ttf", 33)
-    fs = _f("arialbd.ttf", 21)
+    fn = _f("arialbd.ttf", 28)
+    fa = _f("arialbd.ttf", 28)
+    fs = _f("arialbd.ttf", 19)
     # Төв хэсгийн "30,000₮" хэдэн пиксел эзэлж болохыг хэмжээд, тал бүрт
     # үлдсэн зайд нэрсийг автомат тааруулна.
     sample_amt = f"{rnd.bets[0].amount:,}₮" if rnd.bets else "30,000₮"
     amt_half = _tw(d, sample_amt, fa) / 2
-    name_max_w = int(W / 2 - amt_half - 218)  # 194 (start) + 24 padding
+    name_max_w = int(W / 2 - amt_half - 172)  # 172: start(170) + padding(2)
     y = top
     for bet in rnd.bets:
         a, b = bet.player_a, bet.player_b
@@ -623,26 +623,26 @@ def render_betting(rnd, banks, mt=None):
         b_col = SUB if (has_win and not b_win) else WHITE
         d.rounded_rectangle([80, y, W - 80, y + 104], radius=13, fill=ROW,
                             outline=LINE, width=1)
-        _person(d, 128, y + 52, 32, ORANGE if a_col == WHITE else SUB)
+        _person(d, 116, y + 52, 28, ORANGE if a_col == WHITE else SUB)
         if a_win:
-            _star(d, 170, y + 42, 12, GOLD)
-        an = _fit(d, _name(a, 14), fn, name_max_w)
-        d.text((194, y + 34), an, font=fn, fill=a_col)
-        _person(d, W - 128, y + 52, 32, BLUE if b_col == WHITE else SUB)
+            _star(d, 152, y + 42, 11, GOLD)
+        an = _fit(d, _name(a, 18), fn, name_max_w)
+        d.text((170, y + 36), an, font=fn, fill=a_col)
+        _person(d, W - 116, y + 52, 28, BLUE if b_col == WHITE else SUB)
         if b_win:
-            _star(d, W - 170, y + 42, 12, GOLD)
-        bn = _fit(d, _name(b, 14), fn, name_max_w)
-        d.text((W - 194 - _tw(d, bn, fn), y + 34), bn, font=fn, fill=b_col)
+            _star(d, W - 152, y + 42, 11, GOLD)
+        bn = _fit(d, _name(b, 18), fn, name_max_w)
+        d.text((W - 170 - _tw(d, bn, fn), y + 36), bn, font=fn, fill=b_col)
         amt = f"{bet.amount:,}₮"
-        _ct(d, W / 2, y + 22, amt, fa, GOLD)
+        _ct(d, W / 2, y + 24, amt, fa, GOLD)
         if has_win:
             acc = {UNPAID: GOLD, SETTLED: GREEN,
                    DEBT: RED}.get(bet.status, SUB)
             word = {UNPAID: "тооцоо хүлээж буй", SETTLED: "төлөгдсөн",
                     DEBT: "өр болсон"}.get(bet.status, "")
-            _ct(d, W / 2, y + 62, word, fs, acc)
+            _ct(d, W / 2, y + 64, word, fs, acc)
         else:
-            _ct(d, W / 2, y + 62, "vs", fs, SUB)
+            _ct(d, W / 2, y + 64, "vs", fs, SUB)
         y += 116
     y += 8
     if not has_win:
