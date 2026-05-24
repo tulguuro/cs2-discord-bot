@@ -608,15 +608,15 @@ async def banks_cmd(interaction: discord.Interaction):
     # client нь <@uid> mention-ийг автомат resolve хийдэг.
     rows = [(uid, ba) for uid, ba in _banks.items() if uid >= 1_000_000]
     if not rows:
-        await interaction.followup.send(
+        await interaction.response.send_message(
             "Энэ серверт бүртгэлтэй банкны данс алга. `/setbank`-аар эхэлнэ үү.")
         return
-    # Гишүүний нэрээр эрэмбэлж
-    rows.sort(key=lambda r: r[0].display_name.lower())
+    # Holder нэрээр эрэмбэлж (uid нь int, member object байхгүй)
+    rows.sort(key=lambda r: r[1].holder.lower())
     lines = []
-    for i, (m, ba) in enumerate(rows, 1):
+    for i, (uid, ba) in enumerate(rows, 1):
         # `9796686318` хэлбэрээр copy боломжтой mono код
-        lines.append(f"`{i:>2}`  ▸  <@{m.id}>  ·  **{ba.bank}**  ·  "
+        lines.append(f"`{i:>2}`  ▸  <@{uid}>  ·  **{ba.bank}**  ·  "
                      f"`{ba.number}`  ·  {ba.holder}")
     embed = discord.Embed(
         title="🏦  БАНКНЫ ДАНСНЫ ДЭВТЭР",
@@ -625,7 +625,7 @@ async def banks_cmd(interaction: discord.Interaction):
     )
     embed.set_author(name="⚡  CS2 · 5v5")
     embed.set_footer(text=f"Нийт {len(rows)} гишүүн · бооцооны төлбөрт ашиглана")
-    await interaction.followup.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="setbank",
