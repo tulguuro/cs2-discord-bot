@@ -235,6 +235,65 @@ load_channels()
 
 # ==================== JSONBin persistent storage ====================
 
+def _player_to_dict(p):
+    return {"id": p.id, "name": p.name, "rating": p.rating}
+
+
+def _team_to_dict(t):
+    return {"name": t.name, "players": [_player_to_dict(p) for p in t.players]}
+
+
+def _player_from_dict(d):
+    return Player(id=d["id"], name=d["name"], rating=d.get("rating", 0.0))
+
+
+def _bet_round_to_dict(rnd):
+    """BettingRound serialize."""
+    from models import Team
+    return {
+        "team1": _team_to_dict(rnd.team1),
+        "team2": _team_to_dict(rnd.team2),
+        "amount": rnd.amount,
+        "winner_team": rnd.winner_team,
+        "bets": [{
+            "player_a": _player_to_dict(b.player_a),
+            "player_b": _player_to_dict(b.player_b),
+            "amount": b.amount,
+            "status": b.status,
+            "winner_id": b.winner.id if b.winner else None,
+            "loser_id": b.loser.id if b.loser else None,
+        } for b in rnd.bets],
+    }
+
+
+def _bet_round_from_dict(d):
+    """BettingRound deserialize."""
+    from models import Team
+    from betting import Bet, BettingRound
+    t1 = Team(name=d["team1"]["name"],
+              players=[_player_from_dict(p) for p in d["team1"]["players"]])
+    t2 = Team(name=d["team2"]["name"],
+              players=[_player_from_dict(p) for p in d["team2"]["players"]])
+    rnd = BettingRound.__new__(BettingRound)
+    rnd.team1 = t1
+    rnd.team2 = t2
+    rnd.amount = d["amount"]
+    rnd.winner_team = d.get("winner_team")
+    rnd.bets = []
+    # Players-уудыг id-р хайхаас зориулсан lookup
+    by_id = {p.id: p for p in t1.players + t2.players}
+    for bd in d["bets"]:
+        bet = Bet.__new__(Bet)
+        bet.player_a = _player_from_dict(bd["player_a"])
+        bet.player_b = _player_from_dict(bd["player_b"])
+        bet.amount = bd["amount"]
+        bet.status = bd["status"]
+        bet.winner = by_id.get(bd["winner_id"]) if bd.get("winner_id") else None
+        bet.loser = by_id.get(bd["loser_id"]) if bd.get("loser_id") else None
+        rnd.bets.append(bet)
+    return rnd
+
+
 def _state_snapshot():
     """In-memory state-аас JSONBin-руу хадгалах snapshot үүсгэх."""
     return {
@@ -260,6 +319,17 @@ def _state_snapshot():
             for g, led in _ledgers.items()
         },
         "channels": {str(g): c for g, c in _reminder_channels.items()},
+        "betting": {
+            str(g): _bet_round_to_dict(rnd)
+            for g, rnd in _betting.items() if rnd is not None
+        },
+        "bet_boards": {
+            str(g): {"channel_id": msg.channel.id, "message_id": msg.id}
+            for g, msg in _bet_boards.items() if msg is not None
+        },
+        "match_times": {
+            str(g): dt.isoformat() for g, dt in _match_times.items()
+        },
     }
 
 
@@ -269,6 +339,10 @@ def _restore_from_snapshot(data):
     _banks.clear()
     _ledgers.clear()
     _reminder_channels.clear()
+    _betting.clear()
+    # _bet_boards-ыг хадгалалтын мэдээлэл болж raw byte storage-руу
+    _bet_boards_meta.clear()
+    _match_times.clear()
     for gid, mems in (data.get("ratings") or {}).items():
         _ratings[int(gid)] = {int(m): float(r) for m, r in mems.items()}
     for mid, b in (data.get("banks") or {}).items():
@@ -284,6 +358,19 @@ def _restore_from_snapshot(data):
         _ledgers[int(gid)] = led
     for gid, cid in (data.get("channels") or {}).items():
         _reminder_channels[int(gid)] = int(cid)
+    for gid, bd in (data.get("betting") or {}).items():
+        try:
+            _betting[int(gid)] = _bet_round_from_dict(bd)
+        except Exception as e:
+            print(f"[АНХААР] betting restore failed (gid={gid}): {e}")
+    for gid, bm in (data.get("bet_boards") or {}).items():
+        _bet_boards_meta[int(gid)] = (int(bm["channel_id"]),
+                                       int(bm["message_id"]))
+    for gid, ts in (data.get("match_times") or {}).items():
+        try:
+            _match_times[int(gid)] = datetime.fromisoformat(ts)
+        except Exception:
+            pass
 
 
 async def jsonbin_load():
@@ -363,8 +450,26 @@ def schedule_save():
             pass
 
 
-@bot.event
-async def on_ready():
+async def _reattach_views():
+    """Restart-аас сэргэхэд хуучин Discord message-уудад view-уудыг шинээр
+    attach хийнэ. Тэгэхэд button-ууд "This interaction failed" биш —
+    шинэ Python процессын callback-руу route хийгдэнэ.
+    """
+    # Бэтинг самбар — _bet_boards_meta-аас (channel_id, message_id) уншиж
+    # message-ыг fetch + view edit. Амжилттай бол _bet_boards-руу хадгална.
+    n_bet = 0
+    for gid, (ch_id, msg_id) in list(_bet_boards_meta.items()):
+        try:
+            channel = bot.get_channel(ch_id) or await bot.fetch_channel(ch_id)
+            msg = await channel.fetch_message(msg_id)
+            view = BettingView(gid)
+            await msg.edit(view=view)
+            _bet_boards[gid] = msg
+            n_bet += 1
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            print(f"[REATTACH] betting gid={gid} skip: {e}")
+            _bet_boards_meta.pop(gid, None)
+    print(f"[REATTACH] betting views ✓ {n_bet} board(s)")
     """Бот холбогдоход slash командуудыг бүртгэнэ.
 
     GUILD_ID байвал тухайн серверт ШУУД sync хийнэ (хормын дотор гарна).
@@ -376,6 +481,11 @@ async def on_ready():
         await jsonbin_load()
     except Exception as e:
         print(f"[JSONBIN] LOAD алдаа: {e}")
+    # Бэтинг + өрийн дэвтэр view-уудыг хуучин message-уудад re-attach хийх
+    try:
+        await _reattach_views()
+    except Exception as e:
+        print(f"[REATTACH] алдаа: {e}")
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
@@ -669,6 +779,7 @@ _sessions = {}        # {guild_id: MatchSession}
 _boards = {}          # {guild_id: бүртгэлийн самбарын Message}
 _betting = {}         # {guild_id: BettingRound}
 _bet_boards = {}      # {guild_id: бооцооны самбарын Message}
+_bet_boards_meta = {} # {guild_id: (channel_id, message_id)} — JSONBin restore
 _match_times = {}     # {guild_id: тоглолт нээсэн огноо (datetime)}
 _MN_TZ = timezone(timedelta(hours=8))   # Монгол (Улаанбаатар) цаг
 FACEIT_ORANGE = 0xFF5500   # FACEIT брэндийн улбар шар өнгө
@@ -1799,6 +1910,7 @@ async def _post_betting_board(interaction, guild_id):
             msg = await interaction.channel.send(
                 embed=betting_embed(guild_id), view=BettingView(guild_id))
         _bet_boards[guild_id] = msg
+        schedule_save()  # JSONBin persistence — Restart-аас сэргэх
     except Exception as e:
         print(f"[АНХААР] бооцооны самбар нийтэлж чадсангүй: {e}")
 
@@ -1892,6 +2004,7 @@ class BettingResultButton(discord.ui.Button):
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
+        schedule_save()
         file = _betting_file(self.guild_id)
         if file is not None:
             await interaction.response.edit_message(
@@ -1926,6 +2039,7 @@ class BettingResetButton(discord.ui.Button):
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
+        schedule_save()
         file = _betting_file(self.guild_id)
         if file is not None:
             await interaction.response.edit_message(
@@ -1969,6 +2083,7 @@ async def _resolve_bet(interaction, guild_id, bet_idx, received):
             save_channels()
         note = (f"🧾 Өр бүртгэгдлээ: {_who(bet.loser)} → "
                 f"{_who(bet.winner)} **{bet.amount:,}₮**. `/debts`-ээс хянана.")
+    schedule_save()
     file = _betting_file(guild_id)
     if file is not None:
         await interaction.response.edit_message(
