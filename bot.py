@@ -800,7 +800,7 @@ _SEED_RATINGS = {
 }
 
 _SEED_BANKS = {
-    # 2026-05-25 өмнөх /banks screenshot-аас (11 ширхэг)
+    # 2026-05-25 өмнөх /banks screenshot-аас (15 ширхэг)
     # display_name → (bank, number, holder)
     "FroSty": ("GOLOMT", "190015002209318015", "FroSty"),
     "Arigun4LiFE": ("Khan bank", "5020847253", "Arigun4LiFE"),
@@ -813,6 +813,11 @@ _SEED_BANKS = {
     "Tulguur": ("Khan bank", "5015285982", "Tulguur"),
     "Yoko": ("TDB", "416004206", "Yoko"),
     "#1 DALAI": ("Худалдаа хөгжил", "840004000499281891", "Далай"),
+    # 2026-05-26 нэмэлт (бүртгэгдсэний дараа):
+    "Balt12": ("Khan bank", "5046451284", "Balt"),
+    "Balt": ("Khan bank", "5046451284", "Balt"),
+    "🅸🅽🅰love you": ("Khan bank", "5163250867", "Ina"),
+    "daidoo": ("Khan bank", "5027672375", "Sainaa"),
 }
 
 
