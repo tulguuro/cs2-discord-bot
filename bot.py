@@ -417,25 +417,43 @@ async def jsonbin_load():
 
 
 async def jsonbin_save():
-    """In-memory state-ыг JSONBin-руу async хадгалах."""
+    """In-memory state-ыг JSONBin-руу async хадгалах.
+
+    JSONBin sometimes 5xx алдаа буцаадаг — retry 3 удаа exponential backoff-р
+    (0.5s, 1s, 2s). Дашгай зөвхөн server side алдаа (5xx) дээр retry хийнэ.
+    """
     if not JSONBIN_KEY or not JSONBIN_BIN_ID:
         return
     import aiohttp
+    import asyncio
     headers = {"X-Master-Key": JSONBIN_KEY,
                "Content-Type": "application/json"}
     url = f"{_JSONBIN_BASE}/{JSONBIN_BIN_ID}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.put(url, json=_state_snapshot(),
-                                    headers=headers) as resp:
-                if resp.status != 200:
-                    print(f"[JSONBIN] SAVE ✗ HTTP {resp.status}")
-                else:
-                    n_ratings = sum(len(v) for v in _ratings.values())
-                    print(f"[JSONBIN] SAVE ✓ ratings={n_ratings} "
-                          f"banks={len(_banks)}")
-    except Exception as e:
-        print(f"[JSONBIN] SAVE алдаа: {e}")
+    snapshot = _state_snapshot()
+    for attempt in range(3):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(url, json=snapshot,
+                                        headers=headers,
+                                        timeout=aiohttp.ClientTimeout(total=15)
+                                        ) as resp:
+                    if resp.status == 200:
+                        n_ratings = sum(len(v) for v in _ratings.values())
+                        print(f"[JSONBIN] SAVE ✓ ratings={n_ratings} "
+                              f"banks={len(_banks)}"
+                              + (f" (try {attempt+1})" if attempt else ""))
+                        return
+                    if resp.status < 500:
+                        print(f"[JSONBIN] SAVE ✗ HTTP {resp.status} "
+                              f"(no retry)")
+                        return
+                    print(f"[JSONBIN] SAVE ✗ HTTP {resp.status} "
+                          f"(try {attempt+1}/3)")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            print(f"[JSONBIN] SAVE алдаа: {e} (try {attempt+1}/3)")
+        if attempt < 2:
+            await asyncio.sleep(0.5 * (2 ** attempt))
+    print(f"[JSONBIN] SAVE ✗ 3 try бүгд амжилтгүй — local file-р fallback")
 
 
 def schedule_save():
