@@ -926,7 +926,42 @@ async def restore_cmd(interaction: discord.Interaction):
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
-    # 1) Эхлээд JSONBin-аас load оролдоно — /savedata-р түгжсэн full state
+    # 0) backup/bot_state_user_ids.json файл байвал тэрнээс user_id-аар
+    # шууд буцаана (display_name өөрчлөгдсөн ч ажиллана). Хамгийн зөв.
+    user_id_seed_path = os.path.join(_BASE_DIR, "backup",
+                                      "bot_state_user_ids.json")
+    if os.path.exists(user_id_seed_path):
+        try:
+            with open(user_id_seed_path, encoding="utf-8") as f:
+                seed_state = json.load(f)
+            for gid_str, ratings in (seed_state.get("ratings") or {}).items():
+                gr = _ratings.setdefault(int(gid_str), {})
+                for uid_str, rating in ratings.items():
+                    gr[int(uid_str)] = float(rating)
+            for uid_str, bank in (seed_state.get("banks") or {}).items():
+                _banks[int(uid_str)] = BankAccount(
+                    bank=bank["bank"], number=bank["number"],
+                    holder=bank["holder"])
+            save_ratings()
+            save_banks()
+            n_ratings = sum(len(v) for v in _ratings.values())
+            n_banks = len(_banks)
+            # JSONBin-руу мөн шахаж оролдоно (одоохондоо унасан байж болзошгүй)
+            try:
+                await jsonbin_save()
+            except Exception:
+                pass
+            await interaction.followup.send(
+                f"✅ **User_id seed-ээс сэргээгдлээ** (хамгийн зөв)\n"
+                f"• Ratings: **{n_ratings}**\n"
+                f"• Banks: **{n_banks}**\n"
+                f"_Source: `backup/bot_state_user_ids.json` "
+                f"(display_name өөрчлөгдсөн ч ажилладаг)_",
+                ephemeral=True)
+            return
+        except Exception as e:
+            print(f"[RESTORE] user_id seed load failed: {e}")
+    # 1) Дараа нь JSONBin-аас load оролдоно — /savedata-р түгжсэн full state
     # буцаагаад өгнө (хатуу seed-аас илүү шинэ data байгаа).
     if JSONBIN_KEY and JSONBIN_BIN_ID:
         try:
