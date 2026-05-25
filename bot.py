@@ -511,13 +511,36 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+            # bot.tree-руу аль хэдийн ямар commands байгааг шалгаж файлд бичих
+            tree_cmds = sorted(c.name for c in bot.tree.get_commands())
+            with open(os.path.join(_BASE_DIR, "_debug_sync.txt"),
+                      "w", encoding="utf-8") as f:
+                f.write(f"PID: {os.getpid()}\n")
+                f.write(f"GUILD_ID: {GUILD_ID}\n")
+                f.write(f"tree_global_commands: {len(tree_cmds)}\n")
+                f.write(f"tree_names: {tree_cmds}\n\n")
+            # 1) Эхлээд бүх global командыг GUILD scope-руу хуулна
             bot.tree.copy_global_to(guild=guild)
+            # 2) Дараа нь GLOBAL scope-ыг tree-ээс цэвэрлэнэ
+            #    (хуулсан guild copies хэвээр үлдэнэ)
+            bot.tree.clear_commands(guild=None)
+            # 3) Global scope-руу хоосон push — Discord-ын global registry
+            #    цэвэрлэгдэж, давхар команд харагдахгүй болно
+            global_cleared = await bot.tree.sync()
+            print(f"[OK] global cleared — {len(global_cleared)} команд үлдсэн")
+            # 4) Guild scope-руу бүх команд (13 ширхэг) push
             guild_synced = await bot.tree.sync(guild=guild)
-            cmd_names = ", ".join(sorted(c.name for c in guild_synced))
+            cmd_names = sorted(c.name for c in guild_synced)
             print(f"[OK] guild sync — {len(guild_synced)} команд "
                   f"(server: {GUILD_ID})")
-            print(f"[OK] commands: {cmd_names}")
+            print(f"[OK] commands: {', '.join(cmd_names)}")
             print(f"[OK] {bot.user} онлайн боллоо.")
+            # Debug log файлд бичих — NexusHost Files tab-аас хянана
+            with open(os.path.join(_BASE_DIR, "_debug_sync.txt"),
+                      "a", encoding="utf-8") as f:
+                f.write(f"global_cleared: {len(global_cleared)}\n")
+                f.write(f"synced count: {len(guild_synced)}\n")
+                f.write(f"synced names: {cmd_names}\n")
         else:
             global_synced = await bot.tree.sync()
             print(f"[OK] {bot.user} онлайн боллоо — "
