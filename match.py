@@ -166,11 +166,9 @@ class MatchSession:
         """Ахлагч хуваах аргаа сонгоно: 'draft' / 'random' / 'manual' / 'previous'.
 
         Дүрэм:
-          - 'draft'    -> аль нэг ахлагч сонгоход шууд эхэлнэ (анхдагч арга).
-          - 'random'   -> хоёр ахлагч ХОЁУЛАА сонгох ёстой.
-          - 'manual'   -> хоёр ахлагч ХОЁУЛАА сонгох ёстой.
-          - 'previous' -> хоёр ахлагч ХОЁУЛАА сонгох ёстой ("Хуучин баг" — /remake).
-        Захиргааны хүмүүс шинэ санал даравал хуучин нь автоматаар орлогдоно.
+          - Бүх 4 төрөл хоёр ахлагч ХОЁУЛАА ижил сонгох ёстой (2/2).
+          - Ахлагч санал солих гэж шинэ товч даравал хуучин санал
+            автоматаар орлогдоно (vote count харгалзан тэг рүү буцна).
         Үр дүн: 'draft' / 'random' / 'manual' / 'previous' / 'waiting'.
         """
         if self.phase != Phase.DIVISION:
@@ -185,13 +183,14 @@ class MatchSession:
         if choice == "previous" and self.previous_teams is None:
             raise ValueError("Өмнөх багууд алга — /matchprep шинэ сесст байхгүй.")
 
+        # Хуучин санал шинэ сонголтоор орлогдоно (vote counter автоматаар тэгшинэ)
         self.method_votes[captain_num] = choice
-        if choice == "draft":
-            self._begin_draft()
-            return "draft"
-        # Бусад 3 төрөл — хоёр ахлагч хоёулаа ижил сонгох ёстой
-        if self.method_votes.get(1) == choice and self.method_votes.get(2) == choice:
-            if choice == "random":
+        # Хоёр ахлагч ижил сонгосон бол л арга идэвхэжнэ
+        if (self.method_votes.get(1) == choice
+                and self.method_votes.get(2) == choice):
+            if choice == "draft":
+                self._begin_draft()
+            elif choice == "random":
                 self._begin_random()
             elif choice == "manual":
                 self._begin_manual()
