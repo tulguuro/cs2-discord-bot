@@ -725,6 +725,44 @@ async def cleardata_cmd(interaction: discord.Interaction):
         ephemeral=True)
 
 
+import unicodedata as _ucd
+import re as _re
+
+
+def _norm_name(s):
+    """Display_name-уудыг харьцуулах хэлбэрт буулгана.
+
+    Алхамууд:
+      1) Regional indicators (🇮🇳🇦 тугны үсэг) → ASCII A-Z
+      2) Negative squared Latin letters (🅸🅽🅰, 🅼🅾🅲🅴🅰🅽) → ASCII A-Z
+      3) Squared Latin letters (🆂🆃🆉) → ASCII A-Z
+      4) NFKC normalize
+      5) lowercase
+      6) Зөвхөн a-z 0-9 үлдээж бусдыг хасна
+    """
+    if not s:
+        return ""
+    out = []
+    for ch in s:
+        cp = ord(ch)
+        if 0x1F1E6 <= cp <= 0x1F1FF:
+            # Regional indicators (🇦-🇿) → A-Z
+            out.append(chr(ord("A") + cp - 0x1F1E6))
+        elif 0x1F170 <= cp <= 0x1F189:
+            # Negative squared Latin capital (🅰-🅿 + 🆀-🆉) → A-Z
+            out.append(chr(ord("A") + cp - 0x1F170))
+        elif 0x1F130 <= cp <= 0x1F149:
+            # Squared Latin capital (🄰-🅉) → A-Z (хэрэв ашиглавал)
+            out.append(chr(ord("A") + cp - 0x1F130))
+        elif 0x24B6 <= cp <= 0x24CF:
+            # Circled Latin capital (Ⓐ-Ⓩ) → A-Z
+            out.append(chr(ord("A") + cp - 0x24B6))
+        else:
+            out.append(ch)
+    s = _ucd.normalize("NFKC", "".join(out)).lower()
+    return _re.sub(r"[^a-z0-9]", "", s)
+
+
 # Restart-аас алдсан data-г screenshot-аас восстанавит хийх seed.
 # /restore owner-only командын дуудалтаар display_name match-р оноогдоно.
 _SEED_RATINGS = {
@@ -802,16 +840,42 @@ async def restore_cmd(interaction: discord.Interaction):
         members = list(guild.members)
     # Display name ба global name хоёулангаар нь дахин дахин шалгана.
     name_to_member = {}
+    norm_to_member = {}
     for m in members:
         name_to_member.setdefault(m.display_name, m)
         if m.name and m.name not in name_to_member:
             name_to_member[m.name] = m
         if m.global_name and m.global_name not in name_to_member:
             name_to_member[m.global_name] = m
+        # Normalize хэлбэрээр харьцуулах хувилбар үүсгэх (flag emojis /
+        # squared letters / тусгай тэмдгийг ASCII болгож тэгшитгэнэ)
+        for raw in (m.display_name, m.name, m.global_name):
+            if raw:
+                n = _norm_name(raw)
+                if n:
+                    norm_to_member.setdefault(n, m)
+
+    def _find(name):
+        m = name_to_member.get(name)
+        if m is not None:
+            return m
+        n = _norm_name(name)
+        if n:
+            m = norm_to_member.get(n)
+            if m is not None:
+                return m
+            # Substring fallback — seed эсвэл Discord нэр нөгөөгийнхөө доторх
+            # тогтоосон уртын subset бол taarna
+            if len(n) >= 4:
+                for k, mb in norm_to_member.items():
+                    if n in k or k in n:
+                        return mb
+        return None
+
     matched_ratings = 0
     unmatched_ratings = []
     for name, rating in _SEED_RATINGS.items():
-        member = name_to_member.get(name)
+        member = _find(name)
         if member is None:
             unmatched_ratings.append(name)
             continue
@@ -820,7 +884,7 @@ async def restore_cmd(interaction: discord.Interaction):
     matched_banks = 0
     unmatched_banks = []
     for name, (bank, number, holder) in _SEED_BANKS.items():
-        member = name_to_member.get(name)
+        member = _find(name)
         if member is None:
             unmatched_banks.append(name)
             continue
