@@ -693,13 +693,15 @@ async def cleardata_cmd(interaction: discord.Interaction):
 # Restart-аас алдсан data-г screenshot-аас восстанавит хийх seed.
 # /restore owner-only командын дуудалтаар display_name match-р оноогдоно.
 _SEED_RATINGS = {
+    # 2026-05-25 өмнөх /ratings screenshot-аас (31 тоглогч)
     "Arigun4LiFE": 5.0,
     "🅱🅴🅰🆂🆃🆉™": 4.8,
-    "🅸🅽🅰love you": 4.8,
     "Manticore Narka": 4.8,
+    "🅸🅽🅰love you": 4.8,
     "itachi_uchiha8579": 4.7,
     "Tushka": 4.5,
     "Insaniti": 4.5,
+    "♤《Hero》♤": 4.3,
     "nam-ra": 4.2,
     "cuT-": 4.0,
     "-Yea ji-": 4.0,
@@ -707,27 +709,38 @@ _SEED_RATINGS = {
     "daidoo": 3.8,
     "Tulguur": 3.6,
     "#1 DALAI": 3.6,
-    "MxH.": 3.5,
     "Bachka": 3.5,
     "FroSty": 3.0,
     "#1": 3.0,
+    "MxH.": 3.0,
     "Balt12": 2.5,
     "sanchir": 2.5,
+    "🅼.🅾🅲🅴🅰🅽": 2.3,
     "Wade": 2.0,
     "Yoko": 2.0,
-    "🅼.🅾🅲🅴🅰🅽": 2.0,
     "Geo": 2.0,
     "Hisako": 1.5,
     "Conqu": 1.5,
     "Khobun": 1.5,
     "Monzu": 1.5,
+    "Enkhdulz": 1.5,
     "mambosantii": 1.0,
 }
 
 _SEED_BANKS = {
+    # 2026-05-25 өмнөх /banks screenshot-аас (11 ширхэг)
     # display_name → (bank, number, holder)
+    "FroSty": ("GOLOMT", "190015002209318015", "FroSty"),
+    "Arigun4LiFE": ("Khan bank", "5020847253", "Arigun4LiFE"),
+    "Bachka": ("khaan", "150005005626267844", "Bachka"),
+    "Enkhdulz": ("khaan bank", "5040367851", "enkhdul"),
+    "♤《Hero》♤": ("khanbank", "5070363782", "Hero4k"),
+    "Hisako": ("khan", "5628128070", "hisako"),
+    "nam-ra": ("Khan bank", "450005005017566017", "Munkhsuld Delgersaikhan"),
+    "Insaniti": ("khanbank", "230005005114205379", "tsolmon myagmarsuren"),
     "Tulguur": ("Khan bank", "5015285982", "Tulguur"),
     "Yoko": ("TDB", "416004206", "Yoko"),
+    "#1 DALAI": ("Худалдаа хөгжил", "840004000499281891", "Далай"),
 }
 
 
