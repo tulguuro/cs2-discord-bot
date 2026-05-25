@@ -488,6 +488,10 @@ async def _reattach_views():
             print(f"[REATTACH] betting gid={gid} skip: {e}")
             _bet_boards_meta.pop(gid, None)
     print(f"[REATTACH] betting views ✓ {n_bet} board(s)")
+
+
+@bot.event
+async def on_ready():
     """Бот холбогдоход slash командуудыг бүртгэнэ.
 
     GUILD_ID байвал тухайн серверт ШУУД sync хийнэ (хормын дотор гарна).
@@ -507,6 +511,12 @@ async def _reattach_views():
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+            # Force re-register: хуучин commands-уудыг clear хийгээд шинээр
+            # бүртгэнэ. Тэгэхээр Discord-ийн cache арилж шинэ commands шууд
+            # гарна. Энэ нь нэг удаагийн дашгайт ажил гэхдээ Restart бүрт
+            # хийгдэх нь стандартыг тогтоодог.
+            bot.tree.clear_commands(guild=guild)
+            await bot.tree.sync(guild=guild)
             bot.tree.copy_global_to(guild=guild)
             guild_synced = await bot.tree.sync(guild=guild)
             cmd_names = ", ".join(sorted(c.name for c in guild_synced))
