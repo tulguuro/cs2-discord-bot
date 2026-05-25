@@ -836,6 +836,32 @@ async def restore_cmd(interaction: discord.Interaction):
             "Энэ командыг серверт ашиглана уу.", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
+    # 1) Эхлээд JSONBin-аас load оролдоно — /savedata-р түгжсэн full state
+    # буцаагаад өгнө (хатуу seed-аас илүү шинэ data байгаа).
+    if JSONBIN_KEY and JSONBIN_BIN_ID:
+        try:
+            loaded_ok = await jsonbin_load()
+        except Exception as e:
+            print(f"[RESTORE] JSONBin load exception: {e}")
+            loaded_ok = False
+        if loaded_ok:
+            save_ratings()
+            save_banks()
+            save_debts()
+            save_channels()
+            n_ratings = sum(len(v) for v in _ratings.values())
+            n_banks = len(_banks)
+            n_debts = sum(len(l.debts) for l in _ledgers.values())
+            await interaction.followup.send(
+                f"✅ JSONBin-аас сэргээгдлээ\n"
+                f"• Ratings: **{n_ratings}**\n"
+                f"• Banks: **{n_banks}**\n"
+                f"• Debts: **{n_debts}**\n"
+                f"_Энэ нь /savedata-р хамгийн сүүлд хадгалсан state._",
+                ephemeral=True)
+            return
+        else:
+            print("[RESTORE] JSONBin load амжилтгүй — seed fallback ашиглана")
     guild = interaction.guild
     gr = guild_ratings(interaction.guild_id)
     # Бүх member-уудыг fetch — Members Intent ажиллахгүй ч fetch chunk хийнэ.
