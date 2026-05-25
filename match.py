@@ -29,6 +29,7 @@ class MatchSession:
     def __init__(self):
         self.phase = Phase.REGISTRATION
         self.all_joined = []          # бүртгүүлсэн дарааллаараа
+        self.previous_teams = None    # /remake-ын үед өмнөх багуудыг хадгална
         self._reset_division()
 
     # ---------- Дотоод туслахууд ----------

@@ -1520,6 +1520,8 @@ async def remake_cmd(interaction: discord.Interaction,
     saved_teams = old_session.teams  # 'previous'-д ашиглана
     session = MatchSession()
     session.all_joined = saved_players
+    # MethodVoteView нь previous_teams байгаа эсэхээр 4-р товчийг гаргана
+    session.previous_teams = saved_teams
     session._enter_division()  # DIVISION-руу шилжинэ, ахлагч сонгоно
     # method-ийн дагуу шууд тохируулна (default = None → ахлагчид санал хураана)
     if method_val == "draft":
@@ -1638,6 +1640,47 @@ class MethodVoteView(discord.ui.View):
     def __init__(self, guild_id):
         super().__init__(timeout=None)
         self.guild_id = guild_id
+        # /remake-ын дараах session дээр previous_teams хадгалагдсан байвал
+        # 4-р товч "Өмнөх багаар" нэмж VETO руу шууд шилжих боломж өгнө
+        session = _sessions.get(guild_id)
+        if session is not None and getattr(session, "previous_teams",
+                                            None) is not None:
+            btn = discord.ui.Button(
+                label="Өмнөх багаар",
+                style=discord.ButtonStyle.success,
+                emoji="↩️",
+                row=1)
+            btn.callback = self._previous_btn_callback
+            self.add_item(btn)
+
+    async def _previous_btn_callback(self, interaction: discord.Interaction):
+        """4-р товч: DIVISION алгасч өмнөх багаар VETO руу шилжинэ."""
+        session = _sessions.get(self.guild_id)
+        if session is None or session.phase != Phase.DIVISION:
+            await interaction.response.send_message(
+                "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
+            return
+        # Зөвхөн admin/owner эсвэл ахлагч сонгоно
+        cap = self._captain_num(session, interaction.user.id)
+        if cap is None and not _is_admin(interaction):
+            await interaction.response.send_message(
+                "Зөвхөн ахлагч (эсвэл admin/owner) өмнөх багаар үргэлжлүүлнэ.",
+                ephemeral=True)
+            return
+        previous = getattr(session, "previous_teams", None)
+        if previous is None:
+            await interaction.response.send_message(
+                "Өмнөх багууд олдсонгүй.", ephemeral=True)
+            return
+        try:
+            session.division_method = "previous"
+            session.teams = previous
+            session.confirm_division()  # phase = VETO, dice roll-той
+        except ValueError as e:
+            await interaction.response.send_message(str(e), ephemeral=True)
+            return
+        _auto_veto(session)
+        await _refresh_and_check(interaction, self.guild_id)
 
     def _captain_num(self, session, user_id):
         if session.captain1 and user_id == session.captain1.id:
