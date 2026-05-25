@@ -1736,20 +1736,39 @@ class MethodVoteView(discord.ui.View):
 class DivisionDoneView(discord.ui.View):
     """Багууд хуваагдсаны дараа — Дахин хуваах / Дахин эхлүүлэх / Баталгаажуулах.
 
-    Баталгаажуулах товч 2/2 ахлагчийн санал авна (vote counter харагдана).
+    Бүх товч add_item-аар dynamic үүсгэгдсэн тул confirm товчны label-д
+    X/2 counter шинэчлэгдэн харагдана.
     """
 
     def __init__(self, guild_id):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         session = _sessions.get(guild_id)
-        # Reroll товчийг random тохиолдолд л үлдээнэ
-        if session is None or session.division_method != "random":
-            self.remove_item(self.reroll_btn)
-        # Баталгаажуулах товчны label дээр X/2 counter гаргана
-        confirms = (session.confirm_votes if session is not None else {}) or {}
+        # 1) Reroll товчийг зөвхөн random тохиолдолд нэмнэ
+        if session is not None and session.division_method == "random":
+            reroll = discord.ui.Button(
+                label="Дахин хуваах",
+                style=discord.ButtonStyle.secondary,
+                emoji="🔁")
+            reroll.callback = self._reroll_cb
+            self.add_item(reroll)
+        # 2) Дахин эхлүүлэх — бүх тохиолдолд
+        restart = discord.ui.Button(
+            label="Дахин эхлүүлэх",
+            style=discord.ButtonStyle.secondary,
+            emoji="🔄")
+        restart.callback = self._restart_cb
+        self.add_item(restart)
+        # 3) Баталгаажуулах — confirm counter-той dynamic label-тай
+        confirms = (session.confirm_votes
+                    if session is not None else {}) or {}
         n_confirm = sum(1 for v in confirms.values() if v)
-        self.confirm_btn.label = f"Баталгаажуулах  {n_confirm}/2"
+        confirm = discord.ui.Button(
+            label=f"Баталгаажуулах  {n_confirm}/2",
+            style=discord.ButtonStyle.success,
+            emoji="✅")
+        confirm.callback = self._confirm_cb
+        self.add_item(confirm)
 
     def _is_captain(self, session, user_id):
         return ((session.captain1 and user_id == session.captain1.id) or
@@ -1762,9 +1781,7 @@ class DivisionDoneView(discord.ui.View):
             return 2
         return None
 
-    @discord.ui.button(label="Дахин хуваах", style=discord.ButtonStyle.secondary,
-                       emoji="🔁")
-    async def reroll_btn(self, interaction: discord.Interaction, button):
+    async def _reroll_cb(self, interaction: discord.Interaction):
         session = _sessions.get(self.guild_id)
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
@@ -1782,9 +1799,7 @@ class DivisionDoneView(discord.ui.View):
             return
         await _refresh_and_check(interaction, self.guild_id)
 
-    @discord.ui.button(label="Дахин эхлүүлэх",
-                       style=discord.ButtonStyle.secondary, emoji="🔄")
-    async def restart_btn(self, interaction: discord.Interaction, button):
+    async def _restart_cb(self, interaction: discord.Interaction):
         session = _sessions.get(self.guild_id)
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
@@ -1802,14 +1817,11 @@ class DivisionDoneView(discord.ui.View):
             return
         await _refresh_and_check(interaction, self.guild_id)
 
-    @discord.ui.button(label="Баталгаажуулах  0/2",
-                       style=discord.ButtonStyle.success, emoji="✅")
-    async def confirm_btn(self, interaction: discord.Interaction, button):
+    async def _confirm_cb(self, interaction: discord.Interaction):
         session = _sessions.get(self.guild_id)
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        # Captain эсвэл admin/owner-ийг шалгана
         cap = self._captain_num(session, interaction.user.id)
         is_override = cap is None and _is_admin(interaction)
         if cap is None and not is_override:
@@ -1819,13 +1831,11 @@ class DivisionDoneView(discord.ui.View):
             return
         try:
             if is_override:
-                # Admin/owner шууд 2 саналыг нэгтгэнэ
                 both = session.vote_confirm(1)
                 if not both:
                     both = session.vote_confirm(2)
             else:
                 both = session.vote_confirm(cap)
-                # Fake captain байвал автомат vote
                 other_num = 2 if cap == 1 else 1
                 other_cap = (session.captain2 if cap == 1
                              else session.captain1)
