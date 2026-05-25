@@ -163,33 +163,40 @@ class MatchSession:
     # ---------- Баг хуваах ----------
 
     def vote_method(self, captain_num, choice):
-        """Ахлагч хуваах аргаа сонгоно: 'draft' / 'random' / 'manual'.
+        """Ахлагч хуваах аргаа сонгоно: 'draft' / 'random' / 'manual' / 'previous'.
 
         Дүрэм:
-          - 'draft'  -> аль нэг ахлагч сонгоход шууд эхэлнэ (анхдагч арга).
-          - 'random' -> хоёр ахлагч ХОЁУЛАА сонгох ёстой.
-          - 'manual' -> хоёр ахлагч ХОЁУЛАА сонгох ёстой.
-        Үр дүн: 'draft' / 'random' / 'manual' / 'waiting'.
+          - 'draft'    -> аль нэг ахлагч сонгоход шууд эхэлнэ (анхдагч арга).
+          - 'random'   -> хоёр ахлагч ХОЁУЛАА сонгох ёстой.
+          - 'manual'   -> хоёр ахлагч ХОЁУЛАА сонгох ёстой.
+          - 'previous' -> хоёр ахлагч ХОЁУЛАА сонгох ёстой ("Хуучин баг" — /remake).
+        Захиргааны хүмүүс шинэ санал даравал хуучин нь автоматаар орлогдоно.
+        Үр дүн: 'draft' / 'random' / 'manual' / 'previous' / 'waiting'.
         """
         if self.phase != Phase.DIVISION:
             raise ValueError("Хуваалтын шатанд байхгүй байна.")
         if captain_num not in (1, 2):
             raise ValueError("captain_num нь 1 эсвэл 2 байх ёстой.")
-        if choice not in ("draft", "random", "manual"):
-            raise ValueError("choice нь 'draft'/'random'/'manual' байх ёстой.")
+        if choice not in ("draft", "random", "manual", "previous"):
+            raise ValueError(
+                "choice нь 'draft'/'random'/'manual'/'previous' байх ёстой.")
         if self.division_method is not None:
             raise ValueError("Хуваах арга аль хэдийн сонгогдсон.")
+        if choice == "previous" and self.previous_teams is None:
+            raise ValueError("Өмнөх багууд алга — /matchprep шинэ сесст байхгүй.")
 
         self.method_votes[captain_num] = choice
         if choice == "draft":
             self._begin_draft()
             return "draft"
-        # 'random'/'manual' — хоёр ахлагч хоёулаа ижил сонгох ёстой
+        # Бусад 3 төрөл — хоёр ахлагч хоёулаа ижил сонгох ёстой
         if self.method_votes.get(1) == choice and self.method_votes.get(2) == choice:
             if choice == "random":
                 self._begin_random()
-            else:
+            elif choice == "manual":
                 self._begin_manual()
+            else:  # previous
+                self._begin_previous()
             return choice
         return "waiting"
 
@@ -206,6 +213,11 @@ class MatchSession:
     def _begin_manual(self):
         self.division_method = "manual"
         self.manual = ManualDivision(self.captain1, self.captain2, self.players)
+
+    def _begin_previous(self):
+        """Өмнөх багуудыг шууд хадгалж, VETO бэлэн төлвийг үүсгэнэ."""
+        self.division_method = "previous"
+        self.teams = self.previous_teams
 
     def draft_pick(self, captain_num, player):
         """Ээлжит ахлагч тоглогч сонгоно."""

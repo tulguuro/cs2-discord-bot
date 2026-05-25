@@ -1635,52 +1635,46 @@ def teams_embed(session, title="⚔️  БАГУУД ХУВААГДЛАА"):
 
 
 class MethodVoteView(discord.ui.View):
-    """Ахлагчид хуваах аргаа сонгоно (одоохондоо Random бэлэн)."""
+    """Ахлагчид хуваах аргаа сонгоно. Vote counter X/2 товч бүрд харагдана."""
+
+    # (choice_value, base_label, emoji, style)
+    _METHODS = [
+        ("draft",    "Draft",     "🎯", discord.ButtonStyle.secondary),
+        ("random",   "Random",    "🔀", discord.ButtonStyle.primary),
+        ("manual",   "Manual",    "✋", discord.ButtonStyle.secondary),
+        ("previous", "Хуучин баг", "↩️", discord.ButtonStyle.success),
+    ]
 
     def __init__(self, guild_id):
         super().__init__(timeout=None)
         self.guild_id = guild_id
-        # /remake-ын дараах session дээр previous_teams хадгалагдсан байвал
-        # 4-р товч "Өмнөх багаар" нэмж VETO руу шууд шилжих боломж өгнө
         session = _sessions.get(guild_id)
-        if session is not None and getattr(session, "previous_teams",
-                                            None) is not None:
+        method_votes = (session.method_votes if session is not None
+                        else {}) or {}
+        has_previous = (session is not None
+                        and getattr(session, "previous_teams", None) is not None)
+        # Vote counter — choice → count
+        counts = {ch: 0 for ch, _, _, _ in self._METHODS}
+        for v in method_votes.values():
+            if v in counts:
+                counts[v] += 1
+        # Товч бүрийг dynamic-аар үүсгэнэ — vote count label-руу нэмэгдэнэ
+        for choice, label, emoji, style in self._METHODS:
+            if choice == "previous" and not has_previous:
+                continue  # /matchprep дээр previous товчгүй
             btn = discord.ui.Button(
-                label="Өмнөх багаар",
-                style=discord.ButtonStyle.success,
-                emoji="↩️",
-                row=1)
-            btn.callback = self._previous_btn_callback
+                label=f"{label}  {counts[choice]}/2",
+                style=style,
+                emoji=emoji,
+                custom_id=f"method_{choice}_{guild_id}",
+            )
+            btn.callback = self._make_callback(choice)
             self.add_item(btn)
 
-    async def _previous_btn_callback(self, interaction: discord.Interaction):
-        """4-р товч: DIVISION алгасч өмнөх багаар VETO руу шилжинэ."""
-        session = _sessions.get(self.guild_id)
-        if session is None or session.phase != Phase.DIVISION:
-            await interaction.response.send_message(
-                "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
-            return
-        # Зөвхөн admin/owner эсвэл ахлагч сонгоно
-        cap = self._captain_num(session, interaction.user.id)
-        if cap is None and not _is_admin(interaction):
-            await interaction.response.send_message(
-                "Зөвхөн ахлагч (эсвэл admin/owner) өмнөх багаар үргэлжлүүлнэ.",
-                ephemeral=True)
-            return
-        previous = getattr(session, "previous_teams", None)
-        if previous is None:
-            await interaction.response.send_message(
-                "Өмнөх багууд олдсонгүй.", ephemeral=True)
-            return
-        try:
-            session.division_method = "previous"
-            session.teams = previous
-            session.confirm_division()  # phase = VETO, dice roll-той
-        except ValueError as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
-            return
-        _auto_veto(session)
-        await _refresh_and_check(interaction, self.guild_id)
+    def _make_callback(self, choice):
+        async def _cb(interaction: discord.Interaction):
+            await self._handle_vote(interaction, choice)
+        return _cb
 
     def _captain_num(self, session, user_id):
         if session.captain1 and user_id == session.captain1.id:
@@ -1690,12 +1684,7 @@ class MethodVoteView(discord.ui.View):
         return None
 
     def _resolve_voter(self, session, interaction):
-        """(captain_num, is_admin_override) буцаана.
-
-        Жинхэнэ ахлагч бол (1|2, False). admin/owner бөгөөд ахлагч биш
-        бол (1, True) — captain 1 болж саналаа өгөөд, нөгөөг автомат
-        нэгтгэнэ.
-        """
+        """(captain_num, is_admin_override) буцаана."""
         cap = self._captain_num(session, interaction.user.id)
         if cap is not None:
             return cap, False
@@ -1703,69 +1692,44 @@ class MethodVoteView(discord.ui.View):
             return 1, True
         return None, False
 
-    async def _vote_and_finalize(self, interaction, session, choice):
-        """Сонголтыг бүртгээд, хэрэгцээтэй бол нөгөө ахлагчийг автомат
-        нэгтгэнэ (admin override эсвэл fake captain тохиолдолд)."""
+    async def _handle_vote(self, interaction, choice):
+        session = _sessions.get(self.guild_id)
+        if session is None or session.phase != Phase.DIVISION:
+            await interaction.response.send_message(
+                "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
+            return
         cap, is_override = self._resolve_voter(session, interaction)
         if cap is None:
             await interaction.response.send_message(
                 "Зөвхөн ахлагч (эсвэл admin/owner) хуваах аргыг сонгоно.",
                 ephemeral=True)
-            return None
+            return
         try:
             result = session.vote_method(cap, choice)
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
-            return None
+            return
         if result == "waiting":
             other_num = 2 if cap == 1 else 1
             other_cap = session.captain2 if cap == 1 else session.captain1
-            # admin override: автоматаар нөгөөтэй нэгтгэнэ
-            # fake captain: тест өгөгдлөөр автомат vote
+            # admin override эсвэл fake captain — нөгөөг автоматаар нэгтгэнэ
             if is_override or _is_fake(other_cap):
                 try:
                     session.vote_method(other_num, choice)
                 except ValueError:
                     pass
-        return "ok"
-
-    @discord.ui.button(label="Draft", style=discord.ButtonStyle.secondary,
-                       emoji="🎯")
-    async def draft_btn(self, interaction: discord.Interaction, button):
-        session = _sessions.get(self.guild_id)
-        if session is None or session.phase != Phase.DIVISION:
-            await interaction.response.send_message(
-                "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
-            return
-        if await self._vote_and_finalize(interaction, session, "draft") is None:
-            return
-        _auto_draft(session)
-        await _refresh_and_check(interaction, self.guild_id)
-
-    @discord.ui.button(label="Random", style=discord.ButtonStyle.primary,
-                       emoji="🔀")
-    async def random_btn(self, interaction: discord.Interaction, button):
-        session = _sessions.get(self.guild_id)
-        if session is None or session.phase != Phase.DIVISION:
-            await interaction.response.send_message(
-                "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
-            return
-        if await self._vote_and_finalize(interaction, session, "random") is None:
-            return
-        await _refresh_and_check(interaction, self.guild_id)
-
-    @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary,
-                       emoji="✋")
-    async def manual_btn(self, interaction: discord.Interaction, button):
-        session = _sessions.get(self.guild_id)
-        if session is None or session.phase != Phase.DIVISION:
-            await interaction.response.send_message(
-                "Хуваалтын шат идэвхгүй байна.", ephemeral=True)
-            return
-        if await self._vote_and_finalize(interaction, session, "manual") is None:
-            return
-        if session.division_method == "manual":
+        # Сонгогдсон арга бүрт зориулсан follow-up үйлдэл
+        if session.division_method == "draft":
+            _auto_draft(session)
+        elif session.division_method == "manual":
             _auto_manual(session)
+        elif session.division_method == "previous":
+            # Шууд VETO руу шилжих
+            try:
+                session.confirm_division()
+            except ValueError:
+                pass
+            _auto_veto(session)
         await _refresh_and_check(interaction, self.guild_id)
 
 
