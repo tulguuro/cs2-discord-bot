@@ -583,6 +583,41 @@ async def setrating(interaction: discord.Interaction,
         f"✅ {member.mention} — **{rating_value}★** үнэлгээ авлаа.")
 
 
+@bot.tree.command(name="removerating",
+                  description="[Admin/Owner] Тоглогчийн үнэлгээг устгах")
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(member="Үнэлгээг нь устгах гишүүн")
+async def removerating(interaction: discord.Interaction,
+                       member: discord.Member):
+    if interaction.guild_id is None:
+        await interaction.response.send_message(
+            "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    if not _is_admin(interaction):
+        await interaction.response.send_message(
+            "Зөвхөн server admin эсвэл bot owner устгана.",
+            ephemeral=True)
+        return
+    gr = guild_ratings(interaction.guild_id)
+    if member.id not in gr:
+        await interaction.response.send_message(
+            f"{member.mention}-д бүртгэлтэй үнэлгээ алга байна.",
+            ephemeral=True)
+        return
+    old = gr.pop(member.id)
+    save_ratings()
+    # Идэвхтэй сесст тухайн хүн байвал rating-ийг тэглэж самбар сэргээнэ
+    session = _sessions.get(interaction.guild_id)
+    if session is not None:
+        for p in session.all_joined:
+            if p.id == member.id:
+                p.rating = 0.0
+        await _edit_board(_boards.get(interaction.guild_id),
+                          interaction.guild_id)
+    await interaction.response.send_message(
+        f"🗑️ {member.mention} ({old}★) — үнэлгээ устгагдлаа.")
+
+
 @bot.tree.command(name="ratings",
                   description="Бүх гишүүний чадварын үнэлгээг харах")
 async def ratings_cmd(interaction: discord.Interaction):
@@ -711,7 +746,6 @@ _SEED_RATINGS = {
     "#1 DALAI": 3.6,
     "Bachka": 3.5,
     "FroSty": 3.0,
-    "#1": 3.0,
     "MxH.": 3.0,
     "Balt12": 2.5,
     "sanchir": 2.5,
