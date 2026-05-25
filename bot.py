@@ -1527,9 +1527,11 @@ class DivisionDoneView(discord.ui.View):
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not self._is_captain(session, interaction.user.id):
+        if not self._is_captain(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч дахин хуваалт хийнэ.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) дахин хуваалт хийнэ.",
+                ephemeral=True)
             return
         try:
             session.reroll()
@@ -1545,9 +1547,11 @@ class DivisionDoneView(discord.ui.View):
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not self._is_captain(session, interaction.user.id):
+        if not self._is_captain(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч дахин эхлүүлнэ.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) дахин эхлүүлнэ.",
+                ephemeral=True)
             return
         try:
             session.restart_division()
@@ -1563,9 +1567,11 @@ class DivisionDoneView(discord.ui.View):
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not self._is_captain(session, interaction.user.id):
+        if not self._is_captain(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч баталгаажуулна.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) баталгаажуулна.",
+                ephemeral=True)
             return
         try:
             session.confirm_division()
@@ -1635,7 +1641,7 @@ class DraftSelect(discord.ui.Select):
         draft = session.draft
         cur = draft.current_captain
         cap = session.captain1 if cur == 1 else session.captain2
-        if interaction.user.id != cap.id:
+        if interaction.user.id != cap.id and not _is_admin(interaction):
             await interaction.response.send_message(
                 f"Одоо {_who(cap)}-ийн сонгох ээлж.", ephemeral=True)
             return
@@ -1725,9 +1731,11 @@ class ManualTeamSelect(discord.ui.Select):
         if session is None or session.division_method != "manual":
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not _is_captain_user(session, interaction.user.id):
+        if not _is_captain_user(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч баг хуваана.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) баг хуваана.",
+                ephemeral=True)
             return
         m = session.manual
         pid = int(self.values[0])
@@ -1765,9 +1773,11 @@ class ManualUnassignSelect(discord.ui.Select):
         if session is None or session.division_method != "manual":
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not _is_captain_user(session, interaction.user.id):
+        if not _is_captain_user(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч баг хуваана.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) баг хуваана.",
+                ephemeral=True)
             return
         m = session.manual
         pid = int(self.values[0])
@@ -1798,9 +1808,11 @@ class ManualConfirmButton(discord.ui.Button):
         if session is None or session.phase != Phase.DIVISION:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not _is_captain_user(session, interaction.user.id):
+        if not _is_captain_user(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч баталгаажуулна.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) баталгаажуулна.",
+                ephemeral=True)
             return
         try:
             session.confirm_division()
@@ -1824,9 +1836,11 @@ class ManualRestartButton(discord.ui.Button):
         if session is None or session.phase != Phase.DIVISION:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not _is_captain_user(session, interaction.user.id):
+        if not _is_captain_user(session, interaction.user.id) \
+                and not _is_admin(interaction):
             await interaction.response.send_message(
-                "Зөвхөн ахлагч дахин эхлүүлнэ.", ephemeral=True)
+                "Зөвхөн ахлагч (эсвэл admin/owner) дахин эхлүүлнэ.",
+                ephemeral=True)
             return
         try:
             session.restart_division()
