@@ -1,0 +1,113 @@
+{
+  "description": "CS2 bot data backup. /restorefile-р буцаах боломжтой.",
+  "created_at": "2026-05-26",
+  "ratings_by_name": {
+    "Arigun4LiFE": 5.0,
+    "🅱🅴🅰🆂🆃🆉™": 4.8,
+    "Manticore Narka": 4.8,
+    "🅸🅽🅰love you": 4.8,
+    "itachi_uchiha8579": 4.7,
+    "Tushka": 4.5,
+    "Insaniti": 4.5,
+    "♤《Hero》♤": 4.3,
+    "nam-ra": 4.2,
+    "cuT-": 4.0,
+    "-Yea ji-": 4.0,
+    "d0ucha.": 4.0,
+    "daidoo": 3.8,
+    "Tulguur": 3.6,
+    "#1 DALAI": 3.6,
+    "Bachka": 3.5,
+    "FroSty": 3.0,
+    "MxH.": 3.0,
+    "Balt12": 2.5,
+    "sanchir": 2.5,
+    "🅼.🅾🅲🅴🅰🅽": 2.3,
+    "Wade": 2.0,
+    "Yoko": 2.0,
+    "Geo": 2.0,
+    "Hisako": 1.5,
+    "Conqu": 1.5,
+    "Khobun": 1.5,
+    "Monzu": 1.5,
+    "Enkhdulz": 1.5,
+    "mambosantii": 1.0
+  },
+  "banks_by_name": {
+    "FroSty": {
+      "bank": "GOLOMT",
+      "number": "190015002209318015",
+      "holder": "FroSty"
+    },
+    "Arigun4LiFE": {
+      "bank": "Khan bank",
+      "number": "5020847253",
+      "holder": "Arigun4LiFE"
+    },
+    "Bachka": {
+      "bank": "khaan",
+      "number": "150005005626267844",
+      "holder": "Bachka"
+    },
+    "Enkhdulz": {
+      "bank": "khaan bank",
+      "number": "5040367851",
+      "holder": "enkhdul"
+    },
+    "♤《Hero》♤": {
+      "bank": "khanbank",
+      "number": "5070363782",
+      "holder": "Hero4k"
+    },
+    "Hisako": {
+      "bank": "khan",
+      "number": "5628128070",
+      "holder": "hisako"
+    },
+    "nam-ra": {
+      "bank": "Khan bank",
+      "number": "450005005017566017",
+      "holder": "Munkhsuld Delgersaikhan"
+    },
+    "Insaniti": {
+      "bank": "khanbank",
+      "number": "230005005114205379",
+      "holder": "tsolmon myagmarsuren"
+    },
+    "Tulguur": {
+      "bank": "Khan bank",
+      "number": "5015285982",
+      "holder": "Tulguur"
+    },
+    "Yoko": {
+      "bank": "TDB",
+      "number": "416004206",
+      "holder": "Yoko"
+    },
+    "#1 DALAI": {
+      "bank": "Худалдаа хөгжил",
+      "number": "840004000499281891",
+      "holder": "Далай"
+    },
+    "Balt12": {
+      "bank": "Khan bank",
+      "number": "5046451284",
+      "holder": "Balt"
+    },
+    "Balt": {
+      "bank": "Khan bank",
+      "number": "5046451284",
+      "holder": "Balt"
+    },
+    "🅸🅽🅰love you": {
+      "bank": "Khan bank",
+      "number": "5163250867",
+      "holder": "Ina"
+    },
+    "daidoo": {
+      "bank": "Khan bank",
+      "number": "5027672375",
+      "holder": "Sainaa"
+    }
+  }
+}
