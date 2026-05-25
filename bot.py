@@ -791,6 +791,34 @@ async def setbank(interaction: discord.Interaction,
         ephemeral=True)
 
 
+@bot.tree.command(name="setuserbank",
+                  description="[Admin/Owner] Бусдын дансыг бүртгэх "
+                              "(member эхэнд)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(member="Данс бүртгүүлэх гишүүн",
+                       bank="Банкны нэр (ж: Хаан банк)",
+                       number="Дансны дугаар",
+                       holder="Данс эзэмшигчийн нэр")
+async def setuserbank(interaction: discord.Interaction,
+                      member: discord.Member,
+                      bank: str, number: str, holder: str):
+    """Admin/owner бусдын дансыг member parameter эхэнд оруулж бүртгэх."""
+    if interaction.guild_id is None:
+        await interaction.response.send_message(
+            "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    if not _is_admin(interaction):
+        await interaction.response.send_message(
+            "Зөвхөн server admin эсвэл bot owner ашиглана.", ephemeral=True)
+        return
+    _banks[member.id] = BankAccount(bank=bank, number=number, holder=holder)
+    save_banks()
+    await interaction.response.send_message(
+        f"✅ {member.display_name}-ны данс бүртгэгдлээ:\n"
+        f"**{_banks[member.id]}**",
+        ephemeral=True)
+
+
 # ==================== Тоглолт бэлтгэх — бүртгэл ====================
 
 _sessions = {}        # {guild_id: MatchSession}
