@@ -423,7 +423,7 @@ async def jsonbin_save():
     (0.5s, 1s, 2s). Дашгай зөвхөн server side алдаа (5xx) дээр retry хийнэ.
     """
     if not JSONBIN_KEY or not JSONBIN_BIN_ID:
-        return
+        return False
     import aiohttp
     import asyncio
     headers = {"X-Master-Key": JSONBIN_KEY,
@@ -442,11 +442,11 @@ async def jsonbin_save():
                         print(f"[JSONBIN] SAVE ✓ ratings={n_ratings} "
                               f"banks={len(_banks)}"
                               + (f" (try {attempt+1})" if attempt else ""))
-                        return
+                        return True
                     if resp.status < 500:
                         print(f"[JSONBIN] SAVE ✗ HTTP {resp.status} "
                               f"(no retry)")
-                        return
+                        return False
                     print(f"[JSONBIN] SAVE ✗ HTTP {resp.status} "
                           f"(try {attempt+1}/3)")
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
@@ -454,6 +454,7 @@ async def jsonbin_save():
         if attempt < 2:
             await asyncio.sleep(0.5 * (2 ** attempt))
     print(f"[JSONBIN] SAVE ✗ 3 try бүгд амжилтгүй — local file-р fallback")
+    return False
 
 
 def schedule_save():
@@ -668,17 +669,27 @@ async def savedata_cmd(interaction: discord.Interaction):
             ephemeral=True)
         return
     try:
-        await jsonbin_save()
-        await interaction.followup.send(
-            f"💾 **JSONBin-руу хадгалагдлаа** (retry 3x):\n"
-            f"• ratings: **{n_ratings}**\n"
-            f"• banks: **{n_banks}**\n"
-            f"• debts: **{n_debts}**\n"
-            f"• channels: **{n_channels}**\n"
-            f"• betting: **{n_betting}**\n"
-            f"\n_Console дотор `[JSONBIN] SAVE ✓` лог гарсан эсэхийг "
-            f"шалгана уу._",
-            ephemeral=True)
+        ok = await jsonbin_save()
+        if ok:
+            await interaction.followup.send(
+                f"💾 **JSONBin-руу хадгалагдлаа** ✓\n"
+                f"• ratings: **{n_ratings}**\n"
+                f"• banks: **{n_banks}**\n"
+                f"• debts: **{n_debts}**\n"
+                f"• channels: **{n_channels}**\n"
+                f"• betting: **{n_betting}**",
+                ephemeral=True)
+        else:
+            await interaction.followup.send(
+                f"⚠️ **JSONBin ажиллахгүй байна** (HTTP 5xx, retry 3x бүгд "
+                f"бүтэлгүй)\n"
+                f"Data зөвхөн **local file**-д хадгалагдсан "
+                f"(Restart хийвэл алдагдана):\n"
+                f"• ratings: **{n_ratings}**\n"
+                f"• banks: **{n_banks}**\n"
+                f"• debts: **{n_debts}**\n"
+                f"\n_Хэдэн минут хүлээгээд /savedata дахин дарна уу._",
+                ephemeral=True)
     except Exception as e:
         await interaction.followup.send(
             f"⚠️ Хадгалах оролдлогод алдаа гарлаа: `{e}`",
