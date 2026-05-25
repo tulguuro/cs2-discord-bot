@@ -581,6 +581,48 @@ async def ratings_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+@bot.tree.command(name="savedata",
+                  description="[OWNER] Бүх data-г JSONBin-руу шууд хадгалах")
+@app_commands.default_permissions(administrator=True)
+async def savedata_cmd(interaction: discord.Interaction):
+    """In-memory state-ыг JSONBin-руу шууд push хийнэ. Retry-тэй учраас
+    5xx алдаа гарвал 3 удаа дахин оролдоно. Хэрэглэгч бөглөсний дараа
+    manual түрхэхэд ашиглана.
+    """
+    if OWNER_ID is None or interaction.user.id != OWNER_ID:
+        await interaction.response.send_message(
+            "Энэ команд нь зөвхөн bot-ын эзэнд зориулсан.",
+            ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    n_ratings = sum(len(v) for v in _ratings.values())
+    n_banks = len(_banks)
+    n_debts = sum(len(l.debts) for l in _ledgers.values())
+    n_channels = len(_reminder_channels)
+    n_betting = len(_betting)
+    if not JSONBIN_KEY or not JSONBIN_BIN_ID:
+        await interaction.followup.send(
+            "❌ JSONBin тохиргоо алга — env-д KEY/BIN_ID нэмнэ үү.",
+            ephemeral=True)
+        return
+    try:
+        await jsonbin_save()
+        await interaction.followup.send(
+            f"💾 **JSONBin-руу хадгалагдлаа** (retry 3x):\n"
+            f"• ratings: **{n_ratings}**\n"
+            f"• banks: **{n_banks}**\n"
+            f"• debts: **{n_debts}**\n"
+            f"• channels: **{n_channels}**\n"
+            f"• betting: **{n_betting}**\n"
+            f"\n_Console дотор `[JSONBIN] SAVE ✓` лог гарсан эсэхийг "
+            f"шалгана уу._",
+            ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(
+            f"⚠️ Хадгалах оролдлогод алдаа гарлаа: `{e}`",
+            ephemeral=True)
+
+
 @bot.tree.command(name="cleardata",
                   description="[OWNER] Бүх rating/bank/debt/channel data-г устгах")
 @app_commands.default_permissions(administrator=True)
