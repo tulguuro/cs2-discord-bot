@@ -644,13 +644,91 @@ async def ratings_cmd(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+async def _dm_backup_state(reason="manual"):
+    """Bot owner-руу state-ыг JSON файлаар DM-р backup явуулна.
+
+    JSONBin унасан үед энэ нь хамгийн найдвартай backup сувгийн нэг.
+    Owner DM-нд файлыг хадгалаад /restorefile-р дараа сэргээж болно.
+    """
+    if OWNER_ID is None:
+        return False
+    try:
+        owner = await bot.fetch_user(OWNER_ID)
+        snapshot = _state_snapshot()
+        data = json.dumps(snapshot, ensure_ascii=False, indent=2).encode("utf-8")
+        ts = datetime.now(_MN_TZ).strftime("%Y%m%d-%H%M%S")
+        n_ratings = sum(len(v) for v in _ratings.values())
+        n_banks = len(_banks)
+        n_debts = sum(len(l.debts) for l in _ledgers.values())
+        file = discord.File(io.BytesIO(data),
+                            filename=f"bot_state_{ts}.json")
+        await owner.send(
+            f"💾 **State backup** (`{reason}`)\n"
+            f"• ratings: **{n_ratings}**\n"
+            f"• banks: **{n_banks}**\n"
+            f"• debts: **{n_debts}**\n"
+            f"_Энэ файлыг хадгалаарай — restart-ын дараа `/restorefile`-р "
+            f"буцаах боломжтой._",
+            file=file)
+        print(f"[DM_BACKUP] ✓ {reason} ratings={n_ratings} banks={n_banks}")
+        return True
+    except Exception as e:
+        print(f"[DM_BACKUP] ✗ {e}")
+        return False
+
+
+@bot.tree.command(name="restorefile",
+                  description="[OWNER] State.json файлаас бүх data-г сэргээх")
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(state_file="bot_state_*.json (DM backup file)")
+async def restorefile_cmd(interaction: discord.Interaction,
+                          state_file: discord.Attachment):
+    """Owner-аас илгээгдсэн state.json file-аас бүх dict-ийг буцаана."""
+    if OWNER_ID is None or interaction.user.id != OWNER_ID:
+        await interaction.response.send_message(
+            "Энэ команд нь зөвхөн bot-ын эзэнд зориулсан.",
+            ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        raw = await state_file.read()
+        snapshot = json.loads(raw.decode("utf-8"))
+        _restore_from_snapshot(snapshot)
+        save_ratings()
+        save_banks()
+        save_debts()
+        save_channels()
+        n_ratings = sum(len(v) for v in _ratings.values())
+        n_banks = len(_banks)
+        n_debts = sum(len(l.debts) for l in _ledgers.values())
+        await interaction.followup.send(
+            f"✅ **File-ээс сэргээгдлээ**\n"
+            f"• Ratings: **{n_ratings}**\n"
+            f"• Banks: **{n_banks}**\n"
+            f"• Debts: **{n_debts}**\n"
+            f"_Local file-д хадгалагдсан. JSONBin сэргэхэд автоматаар "
+            f"sync хийгдэнэ._",
+            ephemeral=True)
+        # JSONBin-руу шууд push оролдоно (амжилттай бол persistent болно)
+        try:
+            await jsonbin_save()
+        except Exception:
+            pass
+    except Exception as e:
+        await interaction.followup.send(
+            f"⚠️ File parse алдаа: `{e}`\n"
+            f"_Файл bot_state_*.json хэлбэрийн JSON байх ёстой._",
+            ephemeral=True)
+
+
 @bot.tree.command(name="savedata",
-                  description="[OWNER] Бүх data-г JSONBin-руу шууд хадгалах")
+                  description="[OWNER] Бүх data-г JSONBin + DM-р backup хийх")
 @app_commands.default_permissions(administrator=True)
 async def savedata_cmd(interaction: discord.Interaction):
-    """In-memory state-ыг JSONBin-руу шууд push хийнэ. Retry-тэй учраас
-    5xx алдаа гарвал 3 удаа дахин оролдоно. Хэрэглэгч бөглөсний дараа
-    manual түрхэхэд ашиглана.
+    """In-memory state-ыг JSONBin-руу + Owner-ын DM-руу backup явуулна.
+
+    JSONBin retry 3 удаа оролдоно. JSONBin унасан ч DM backup амжилттай
+    бол owner-ын DM-нд файлыг хадгалаад /restorefile-р буцаана.
     """
     if OWNER_ID is None or interaction.user.id != OWNER_ID:
         await interaction.response.send_message(
@@ -670,26 +748,26 @@ async def savedata_cmd(interaction: discord.Interaction):
         return
     try:
         ok = await jsonbin_save()
-        if ok:
-            await interaction.followup.send(
-                f"💾 **JSONBin-руу хадгалагдлаа** ✓\n"
-                f"• ratings: **{n_ratings}**\n"
-                f"• banks: **{n_banks}**\n"
-                f"• debts: **{n_debts}**\n"
-                f"• channels: **{n_channels}**\n"
-                f"• betting: **{n_betting}**",
-                ephemeral=True)
+        dm_ok = await _dm_backup_state(reason="savedata")
+        if ok and dm_ok:
+            status = "✅ JSONBin + DM backup амжилттай"
+        elif ok:
+            status = "✅ JSONBin амжилттай, DM backup алдаатай"
+        elif dm_ok:
+            status = ("⚠️ JSONBin **унасан** (HTTP 5xx). DM-р backup "
+                      "амжилттай — Owner-ын DM-нд `bot_state_*.json` "
+                      "файлыг хадгалаарай.")
         else:
-            await interaction.followup.send(
-                f"⚠️ **JSONBin ажиллахгүй байна** (HTTP 5xx, retry 3x бүгд "
-                f"бүтэлгүй)\n"
-                f"Data зөвхөн **local file**-д хадгалагдсан "
-                f"(Restart хийвэл алдагдана):\n"
-                f"• ratings: **{n_ratings}**\n"
-                f"• banks: **{n_banks}**\n"
-                f"• debts: **{n_debts}**\n"
-                f"\n_Хэдэн минут хүлээгээд /savedata дахин дарна уу._",
-                ephemeral=True)
+            status = ("❌ JSONBin **БА** DM backup хоёр алдаатай. Data "
+                      "зөвхөн local file-д. Console-аас шалгана уу.")
+        await interaction.followup.send(
+            f"{status}\n"
+            f"• ratings: **{n_ratings}**\n"
+            f"• banks: **{n_banks}**\n"
+            f"• debts: **{n_debts}**\n"
+            f"• channels: **{n_channels}**\n"
+            f"• betting: **{n_betting}**",
+            ephemeral=True)
     except Exception as e:
         await interaction.followup.send(
             f"⚠️ Хадгалах оролдлогод алдаа гарлаа: `{e}`",
