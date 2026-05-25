@@ -1243,12 +1243,20 @@ async def matchprep(interaction: discord.Interaction):
 @bot.tree.command(name="remake",
                   description="BO3 дууссаны дараа дахин хуваах — players үлдэнэ "
                               "(admin/owner)")
-async def remake_cmd(interaction: discord.Interaction):
+@app_commands.default_permissions(administrator=True)
+@app_commands.choices(method=[
+    app_commands.Choice(name="🎯 Draft — ахлагч сонгох", value="draft"),
+    app_commands.Choice(name="🎲 Random — санамсаргүй", value="random"),
+    app_commands.Choice(name="✋ Manual — гар хуваалт", value="manual"),
+    app_commands.Choice(name="↩️ Өмнөх багаар үргэлжлүүлэх", value="previous"),
+])
+@app_commands.describe(method="Хуваалтын арга (хоосон үлдээвэл ахлагчид санал хураана)")
+async def remake_cmd(interaction: discord.Interaction,
+                     method: app_commands.Choice[str] = None):
     """Идэвхтэй player жагсаалтыг хадгалаад баг хуваалтыг шинээр эхлүүлнэ.
 
-    Хуучин session-аас all_joined-ийг хуулж, шинэ MatchSession үүсгээд
-    шууд DIVISION phase-руу шилжинэ. Бэтинг round болон samбар-уудыг
-    цэвэрлэнэ.
+    method параметрээр admin шууд аргаа сонгож, ахлагчдын санал хураалтыг
+    алгасч болно. 'previous' сонгосон бол өмнөх багуудаар veto руу шилжинэ.
     """
     if interaction.guild_id is None:
         await interaction.response.send_message(
@@ -1263,6 +1271,13 @@ async def remake_cmd(interaction: discord.Interaction):
     if old_session is None or not old_session.all_joined:
         await interaction.response.send_message(
             "Идэвхтэй тоглолт алга. Эхлээд `/matchprep` дуудаарай.",
+            ephemeral=True)
+        return
+    method_val = method.value if method is not None else None
+    # 'previous' — өмнөх багууд байх ёстой
+    if method_val == "previous" and old_session.teams is None:
+        await interaction.response.send_message(
+            "Өмнөх багууд олдсонгүй. Энэ session-д баг хуваагдаагүй байна.",
             ephemeral=True)
         return
     # Хуучин самбар + бэтинг арилгах
@@ -1282,9 +1297,22 @@ async def remake_cmd(interaction: discord.Interaction):
     _betting.pop(interaction.guild_id, None)
     # Шинэ session — өмнөх players-уудыг хадгалах
     saved_players = list(old_session.all_joined)
+    saved_teams = old_session.teams  # 'previous'-д ашиглана
     session = MatchSession()
     session.all_joined = saved_players
-    session._enter_division()  # шууд DIVISION phase-руу
+    session._enter_division()  # DIVISION-руу шилжинэ, ахлагч сонгоно
+    # method-ийн дагуу шууд тохируулна (default = None → ахлагчид санал хураана)
+    if method_val == "draft":
+        session._begin_draft()
+    elif method_val == "random":
+        session._begin_random()
+    elif method_val == "manual":
+        session._begin_manual()
+    elif method_val == "previous":
+        # Хуучин багуудыг шинэ session-руу хуулж шууд VETO руу шилжинэ
+        session.division_method = "previous"
+        session.teams = saved_teams
+        session.confirm_division()  # phase = VETO, dice roll-той
     _sessions[interaction.guild_id] = session
     _match_times[interaction.guild_id] = datetime.now(_MN_TZ)
     embed, view = current_embed_and_view(interaction.guild_id)
