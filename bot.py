@@ -907,6 +907,7 @@ _SEED_BANKS = {
     "Balt": ("Khan bank", "5046451284", "Balt"),
     "🅸🅽🅰love you": ("Khan bank", "5163250867", "Ina"),
     "daidoo": ("Khan bank", "5027672375", "Sainaa"),
+    "🅼.🅾🅲🅴🅰🅽": ("Khan bank", "5003756693", "Ganbaa"),
 }
 
 
