@@ -1734,18 +1734,33 @@ class MethodVoteView(discord.ui.View):
 
 
 class DivisionDoneView(discord.ui.View):
-    """Багууд хуваагдсаны дараа — Дахин эхлүүлэх / Баталгаажуулах."""
+    """Багууд хуваагдсаны дараа — Дахин хуваах / Дахин эхлүүлэх / Баталгаажуулах.
+
+    Баталгаажуулах товч 2/2 ахлагчийн санал авна (vote counter харагдана).
+    """
 
     def __init__(self, guild_id):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         session = _sessions.get(guild_id)
+        # Reroll товчийг random тохиолдолд л үлдээнэ
         if session is None or session.division_method != "random":
             self.remove_item(self.reroll_btn)
+        # Баталгаажуулах товчны label дээр X/2 counter гаргана
+        confirms = (session.confirm_votes if session is not None else {}) or {}
+        n_confirm = sum(1 for v in confirms.values() if v)
+        self.confirm_btn.label = f"Баталгаажуулах  {n_confirm}/2"
 
     def _is_captain(self, session, user_id):
         return ((session.captain1 and user_id == session.captain1.id) or
                 (session.captain2 and user_id == session.captain2.id))
+
+    def _captain_num(self, session, user_id):
+        if session.captain1 and user_id == session.captain1.id:
+            return 1
+        if session.captain2 and user_id == session.captain2.id:
+            return 2
+        return None
 
     @discord.ui.button(label="Дахин хуваах", style=discord.ButtonStyle.secondary,
                        emoji="🔁")
@@ -1787,25 +1802,45 @@ class DivisionDoneView(discord.ui.View):
             return
         await _refresh_and_check(interaction, self.guild_id)
 
-    @discord.ui.button(label="Баталгаажуулах", style=discord.ButtonStyle.success,
-                       emoji="✅")
+    @discord.ui.button(label="Баталгаажуулах  0/2",
+                       style=discord.ButtonStyle.success, emoji="✅")
     async def confirm_btn(self, interaction: discord.Interaction, button):
         session = _sessions.get(self.guild_id)
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not self._is_captain(session, interaction.user.id) \
-                and not _is_admin(interaction):
+        # Captain эсвэл admin/owner-ийг шалгана
+        cap = self._captain_num(session, interaction.user.id)
+        is_override = cap is None and _is_admin(interaction)
+        if cap is None and not is_override:
             await interaction.response.send_message(
                 "Зөвхөн ахлагч (эсвэл admin/owner) баталгаажуулна.",
                 ephemeral=True)
             return
         try:
-            session.confirm_division()
+            if is_override:
+                # Admin/owner шууд 2 саналыг нэгтгэнэ
+                both = session.vote_confirm(1)
+                if not both:
+                    both = session.vote_confirm(2)
+            else:
+                both = session.vote_confirm(cap)
+                # Fake captain байвал автомат vote
+                other_num = 2 if cap == 1 else 1
+                other_cap = (session.captain2 if cap == 1
+                             else session.captain1)
+                if not both and _is_fake(other_cap):
+                    both = session.vote_confirm(other_num)
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
-        _auto_veto(session)
+        if both:
+            try:
+                session.confirm_division()
+            except ValueError as e:
+                await interaction.response.send_message(str(e), ephemeral=True)
+                return
+            _auto_veto(session)
         await _refresh_and_check(interaction, self.guild_id)
 
 
@@ -2023,10 +2058,13 @@ class ManualUnassignSelect(discord.ui.Select):
 
 
 class ManualConfirmButton(discord.ui.Button):
-    """Гар хуваалт дууссаны дараах баталгаажуулах товч."""
+    """Гар хуваалт дууссаны дараах баталгаажуулах товч. 2/2 шаардлагатай."""
 
     def __init__(self, guild_id):
-        super().__init__(label="Баталгаажуулах", emoji="✅",
+        session = _sessions.get(guild_id)
+        confirms = (session.confirm_votes if session is not None else {}) or {}
+        n_confirm = sum(1 for v in confirms.values() if v)
+        super().__init__(label=f"Баталгаажуулах  {n_confirm}/2", emoji="✅",
                          style=discord.ButtonStyle.success)
         self.guild_id = guild_id
 
@@ -2035,18 +2073,42 @@ class ManualConfirmButton(discord.ui.Button):
         if session is None or session.phase != Phase.DIVISION:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not _is_captain_user(session, interaction.user.id) \
-                and not _is_admin(interaction):
+        # Captain эсвэл admin/owner-ийг шалгана
+        cap = None
+        if session.captain1 and interaction.user.id == session.captain1.id:
+            cap = 1
+        elif session.captain2 and interaction.user.id == session.captain2.id:
+            cap = 2
+        is_override = cap is None and _is_admin(interaction)
+        if cap is None and not is_override:
             await interaction.response.send_message(
                 "Зөвхөн ахлагч (эсвэл admin/owner) баталгаажуулна.",
                 ephemeral=True)
             return
         try:
-            session.confirm_division()
+            if is_override:
+                # Admin/owner шууд 2 саналыг нэгтгэнэ
+                both = session.vote_confirm(1)
+                if not both:
+                    both = session.vote_confirm(2)
+            else:
+                both = session.vote_confirm(cap)
+                # Fake captain байвал автомат vote
+                other_num = 2 if cap == 1 else 1
+                other_cap = (session.captain2 if cap == 1
+                             else session.captain1)
+                if not both and _is_fake(other_cap):
+                    both = session.vote_confirm(other_num)
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
-        _auto_veto(session)
+        if both:
+            try:
+                session.confirm_division()
+            except ValueError as e:
+                await interaction.response.send_message(str(e), ephemeral=True)
+                return
+            _auto_veto(session)
         await _refresh_and_check(interaction, self.guild_id)
 
 

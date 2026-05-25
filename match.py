@@ -39,6 +39,7 @@ class MatchSession:
         self.captain1 = None
         self.captain2 = None
         self.method_votes = {}        # {captain_num: "draft"/"random"/"manual"}
+        self.confirm_votes = {}       # {captain_num: True}  # 2/2 баталгаажуулах
         self.division_method = None   # "draft" / "random" / "manual"
         self.draft = None
         self.manual = None            # ManualDivision (гар хуваалтын үед)
@@ -229,27 +230,46 @@ class MatchSession:
             self.teams = self.draft.teams()
 
     def manual_assign(self, player, team_num):
-        """Гар хуваалтын үед тоглогчийг багт ононо."""
+        """Гар хуваалтын үед тоглогчийг багт ононо. Багуудын бүрэлдэхүүн
+        өөрчлөгдсөн тул өмнөх confirm-уудыг тэглэнэ."""
         if self.division_method != "manual":
             raise ValueError("Гар хуваалтын горимд биш байна.")
         self.manual.assign(player, team_num)
+        self.confirm_votes = {}
         if self.manual.is_complete:
             self.teams = self.manual.teams()
 
     def manual_unassign(self, player):
-        """Гар хуваалтын үед тоглогчийг багаас нь буцаана."""
+        """Гар хуваалтын үед тоглогчийг багаас нь буцаана. Багууд өөрчлөгдсөн
+        тул өмнөх confirm-уудыг тэглэнэ."""
         if self.division_method != "manual":
             raise ValueError("Гар хуваалтын горимд биш байна.")
         self.manual.unassign(player)
+        self.confirm_votes = {}
         if not self.manual.is_complete:
             self.teams = None
 
     def reroll(self):
-        """Санамсаргүй хуваалтыг дахин хийнэ (таалагдаагүй тохиолдолд)."""
+        """Санамсаргүй хуваалтыг дахин хийнэ (таалагдаагүй тохиолдолд).
+        Шинэ багууд гарах учраас өмнөх confirm-уудыг тэглэнэ."""
         if self.division_method != "random":
             raise ValueError("Зөвхөн санамсаргүй хуваалтыг дахин хийж болно.")
         self.teams = random_split(self.players)
+        self.confirm_votes = {}
         return self.teams
+
+    def vote_confirm(self, captain_num):
+        """Ахлагч багуудыг баталгаажуулна. 2 ахлагч хоёулаа дарвал True
+        буцаах ба тэр үед confirm_division() автоматаар дуудах ёстой."""
+        if self.phase != Phase.DIVISION:
+            raise ValueError("Хуваалтын шатанд байхгүй байна.")
+        if self.teams is None:
+            raise ValueError("Багууд хараахан бэлэн болоогүй байна.")
+        if captain_num not in (1, 2):
+            raise ValueError("captain_num нь 1 эсвэл 2 байх ёстой.")
+        self.confirm_votes[captain_num] = True
+        return bool(self.confirm_votes.get(1)
+                    and self.confirm_votes.get(2))
 
     def confirm_division(self):
         """Багуудыг баталж газрын veto руу шилжинэ. Эхэлж ban хийх багийг буцаана."""
