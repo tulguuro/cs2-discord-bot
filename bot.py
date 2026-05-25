@@ -1744,25 +1744,29 @@ class DivisionDoneView(discord.ui.View):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         session = _sessions.get(guild_id)
+        # Counters
+        def _count(attr):
+            d = getattr(session, attr, None) or {} if session else {}
+            return sum(1 for v in d.values() if v)
         # 1) Reroll товчийг зөвхөн random тохиолдолд нэмнэ
         if session is not None and session.division_method == "random":
+            n_reroll = _count("reroll_votes")
             reroll = discord.ui.Button(
-                label="Дахин хуваах",
+                label=f"Дахин хуваах  {n_reroll}/2",
                 style=discord.ButtonStyle.secondary,
                 emoji="🔁")
             reroll.callback = self._reroll_cb
             self.add_item(reroll)
         # 2) Дахин эхлүүлэх — бүх тохиолдолд
+        n_restart = _count("restart_votes")
         restart = discord.ui.Button(
-            label="Дахин эхлүүлэх",
+            label=f"Дахин эхлүүлэх  {n_restart}/2",
             style=discord.ButtonStyle.secondary,
             emoji="🔄")
         restart.callback = self._restart_cb
         self.add_item(restart)
         # 3) Баталгаажуулах — confirm counter-той dynamic label-тай
-        confirms = (session.confirm_votes
-                    if session is not None else {}) or {}
-        n_confirm = sum(1 for v in confirms.values() if v)
+        n_confirm = _count("confirm_votes")
         confirm = discord.ui.Button(
             label=f"Баталгаажуулах  {n_confirm}/2",
             style=discord.ButtonStyle.success,
@@ -1781,76 +1785,65 @@ class DivisionDoneView(discord.ui.View):
             return 2
         return None
 
-    async def _reroll_cb(self, interaction: discord.Interaction):
-        session = _sessions.get(self.guild_id)
-        if session is None:
-            await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
-            return
-        if not self._is_captain(session, interaction.user.id) \
-                and not _is_admin(interaction):
-            await interaction.response.send_message(
-                "Зөвхөн ахлагч (эсвэл admin/owner) дахин хуваалт хийнэ.",
-                ephemeral=True)
-            return
-        try:
-            session.reroll()
-        except ValueError as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
-            return
-        await _refresh_and_check(interaction, self.guild_id)
+    async def _vote_2of2(self, interaction, vote_fn_name, exec_fn_name,
+                           action_label):
+        """Хоёр ахлагчийн санал нэгдвэл exec_fn_name дуудна.
 
-    async def _restart_cb(self, interaction: discord.Interaction):
+        vote_fn_name: 'vote_reroll'/'vote_restart'/'vote_confirm'
+        exec_fn_name: 'reroll'/'restart_division'/'confirm_division'
+        """
         session = _sessions.get(self.guild_id)
         if session is None:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
-            return
-        if not self._is_captain(session, interaction.user.id) \
-                and not _is_admin(interaction):
-            await interaction.response.send_message(
-                "Зөвхөн ахлагч (эсвэл admin/owner) дахин эхлүүлнэ.",
-                ephemeral=True)
-            return
-        try:
-            session.restart_division()
-        except ValueError as e:
-            await interaction.response.send_message(str(e), ephemeral=True)
-            return
-        await _refresh_and_check(interaction, self.guild_id)
-
-    async def _confirm_cb(self, interaction: discord.Interaction):
-        session = _sessions.get(self.guild_id)
-        if session is None:
-            await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
-            return
+            return False
         cap = self._captain_num(session, interaction.user.id)
         is_override = cap is None and _is_admin(interaction)
         if cap is None and not is_override:
             await interaction.response.send_message(
-                "Зөвхөн ахлагч (эсвэл admin/owner) баталгаажуулна.",
+                f"Зөвхөн ахлагч (эсвэл admin/owner) {action_label}.",
                 ephemeral=True)
-            return
+            return False
         try:
+            vote_fn = getattr(session, vote_fn_name)
             if is_override:
-                both = session.vote_confirm(1)
+                both = vote_fn(1)
                 if not both:
-                    both = session.vote_confirm(2)
+                    both = vote_fn(2)
             else:
-                both = session.vote_confirm(cap)
+                both = vote_fn(cap)
                 other_num = 2 if cap == 1 else 1
                 other_cap = (session.captain2 if cap == 1
                              else session.captain1)
                 if not both and _is_fake(other_cap):
-                    both = session.vote_confirm(other_num)
+                    both = vote_fn(other_num)
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
-            return
+            return False
         if both:
             try:
-                session.confirm_division()
+                getattr(session, exec_fn_name)()
             except ValueError as e:
                 await interaction.response.send_message(str(e), ephemeral=True)
-                return
-            _auto_veto(session)
+                return False
+        return both
+
+    async def _reroll_cb(self, interaction: discord.Interaction):
+        await self._vote_2of2(interaction, "vote_reroll", "reroll",
+                              "дахин хуваалт хийнэ")
+        await _refresh_and_check(interaction, self.guild_id)
+
+    async def _restart_cb(self, interaction: discord.Interaction):
+        await self._vote_2of2(interaction, "vote_restart",
+                              "restart_division", "дахин эхлүүлнэ")
+        await _refresh_and_check(interaction, self.guild_id)
+
+    async def _confirm_cb(self, interaction: discord.Interaction):
+        both = await self._vote_2of2(interaction, "vote_confirm",
+                                       "confirm_division", "баталгаажуулна")
+        if both:
+            session = _sessions.get(self.guild_id)
+            if session is not None:
+                _auto_veto(session)
         await _refresh_and_check(interaction, self.guild_id)
 
 
@@ -2123,10 +2116,15 @@ class ManualConfirmButton(discord.ui.Button):
 
 
 class ManualRestartButton(discord.ui.Button):
-    """Гар хуваалтыг тэглэж арга сонгохоос дахин эхлүүлэх товч."""
+    """Гар хуваалтыг тэглэж арга сонгохоос дахин эхлүүлэх товч.
+    2/2 ахлагчийн санал шаардлагатай."""
 
     def __init__(self, guild_id):
-        super().__init__(label="Дахин эхлүүлэх", emoji="🔄",
+        session = _sessions.get(guild_id)
+        restarts = (getattr(session, "restart_votes", {})
+                    if session is not None else {}) or {}
+        n_restart = sum(1 for v in restarts.values() if v)
+        super().__init__(label=f"Дахин эхлүүлэх  {n_restart}/2", emoji="🔄",
                          style=discord.ButtonStyle.secondary)
         self.guild_id = guild_id
 
@@ -2135,17 +2133,38 @@ class ManualRestartButton(discord.ui.Button):
         if session is None or session.phase != Phase.DIVISION:
             await interaction.response.send_message("Идэвхгүй.", ephemeral=True)
             return
-        if not _is_captain_user(session, interaction.user.id) \
-                and not _is_admin(interaction):
+        cap = None
+        if session.captain1 and interaction.user.id == session.captain1.id:
+            cap = 1
+        elif session.captain2 and interaction.user.id == session.captain2.id:
+            cap = 2
+        is_override = cap is None and _is_admin(interaction)
+        if cap is None and not is_override:
             await interaction.response.send_message(
                 "Зөвхөн ахлагч (эсвэл admin/owner) дахин эхлүүлнэ.",
                 ephemeral=True)
             return
         try:
-            session.restart_division()
+            if is_override:
+                both = session.vote_restart(1)
+                if not both:
+                    both = session.vote_restart(2)
+            else:
+                both = session.vote_restart(cap)
+                other_num = 2 if cap == 1 else 1
+                other_cap = (session.captain2 if cap == 1
+                             else session.captain1)
+                if not both and _is_fake(other_cap):
+                    both = session.vote_restart(other_num)
         except ValueError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
             return
+        if both:
+            try:
+                session.restart_division()
+            except ValueError as e:
+                await interaction.response.send_message(str(e), ephemeral=True)
+                return
         await _refresh_and_check(interaction, self.guild_id)
 
 

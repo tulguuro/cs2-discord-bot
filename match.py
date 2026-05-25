@@ -40,6 +40,8 @@ class MatchSession:
         self.captain2 = None
         self.method_votes = {}        # {captain_num: "draft"/"random"/"manual"}
         self.confirm_votes = {}       # {captain_num: True}  # 2/2 баталгаажуулах
+        self.reroll_votes = {}        # {captain_num: True}  # 2/2 дахин хуваах
+        self.restart_votes = {}       # {captain_num: True}  # 2/2 дахин эхлүүлэх
         self.division_method = None   # "draft" / "random" / "manual"
         self.draft = None
         self.manual = None            # ManualDivision (гар хуваалтын үед)
@@ -251,11 +253,12 @@ class MatchSession:
 
     def reroll(self):
         """Санамсаргүй хуваалтыг дахин хийнэ (таалагдаагүй тохиолдолд).
-        Шинэ багууд гарах учраас өмнөх confirm-уудыг тэглэнэ."""
+        Шинэ багууд гарах учраас өмнөх confirm/reroll-уудыг тэглэнэ."""
         if self.division_method != "random":
             raise ValueError("Зөвхөн санамсаргүй хуваалтыг дахин хийж болно.")
         self.teams = random_split(self.players)
         self.confirm_votes = {}
+        self.reroll_votes = {}
         return self.teams
 
     def vote_confirm(self, captain_num):
@@ -270,6 +273,30 @@ class MatchSession:
         self.confirm_votes[captain_num] = True
         return bool(self.confirm_votes.get(1)
                     and self.confirm_votes.get(2))
+
+    def vote_reroll(self, captain_num):
+        """Ахлагч багуудыг дахин хуваахыг хүсэв. 2/2 болсон үед True буцаах
+        ба тэр үед reroll() автоматаар дуудах ёстой."""
+        if self.phase != Phase.DIVISION:
+            raise ValueError("Хуваалтын шатанд байхгүй байна.")
+        if self.division_method != "random":
+            raise ValueError("Зөвхөн random тохиолдолд дахин хуваана.")
+        if captain_num not in (1, 2):
+            raise ValueError("captain_num нь 1 эсвэл 2 байх ёстой.")
+        self.reroll_votes[captain_num] = True
+        return bool(self.reroll_votes.get(1)
+                    and self.reroll_votes.get(2))
+
+    def vote_restart(self, captain_num):
+        """Ахлагч баг хуваалтыг тэглэхийг хүсэв. 2/2 болсон үед True буцаах
+        ба тэр үед restart_division() автоматаар дуудах ёстой."""
+        if self.phase != Phase.DIVISION:
+            raise ValueError("Хуваалтын шатанд байхгүй байна.")
+        if captain_num not in (1, 2):
+            raise ValueError("captain_num нь 1 эсвэл 2 байх ёстой.")
+        self.restart_votes[captain_num] = True
+        return bool(self.restart_votes.get(1)
+                    and self.restart_votes.get(2))
 
     def confirm_division(self):
         """Багуудыг баталж газрын veto руу шилжинэ. Эхэлж ban хийх багийг буцаана."""
