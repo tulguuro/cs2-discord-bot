@@ -511,12 +511,6 @@ async def on_ready():
     try:
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
-            # Force re-register: хуучин commands-уудыг clear хийгээд шинээр
-            # бүртгэнэ. Тэгэхээр Discord-ийн cache арилж шинэ commands шууд
-            # гарна. Энэ нь нэг удаагийн дашгайт ажил гэхдээ Restart бүрт
-            # хийгдэх нь стандартыг тогтоодог.
-            bot.tree.clear_commands(guild=guild)
-            await bot.tree.sync(guild=guild)
             bot.tree.copy_global_to(guild=guild)
             guild_synced = await bot.tree.sync(guild=guild)
             cmd_names = ", ".join(sorted(c.name for c in guild_synced))
