@@ -1078,6 +1078,63 @@ async def matchprep(interaction: discord.Interaction):
     _boards[interaction.guild_id] = await interaction.original_response()
 
 
+@bot.tree.command(name="remake",
+                  description="BO3 дууссаны дараа дахин хуваах — players үлдэнэ "
+                              "(admin/owner)")
+async def remake_cmd(interaction: discord.Interaction):
+    """Идэвхтэй player жагсаалтыг хадгалаад баг хуваалтыг шинээр эхлүүлнэ.
+
+    Хуучин session-аас all_joined-ийг хуулж, шинэ MatchSession үүсгээд
+    шууд DIVISION phase-руу шилжинэ. Бэтинг round болон samбар-уудыг
+    цэвэрлэнэ.
+    """
+    if interaction.guild_id is None:
+        await interaction.response.send_message(
+            "Энэ командыг серверт ашиглана уу.", ephemeral=True)
+        return
+    if not _is_admin(interaction):
+        await interaction.response.send_message(
+            "Зөвхөн server admin эсвэл bot owner remake хийнэ.",
+            ephemeral=True)
+        return
+    old_session = _sessions.get(interaction.guild_id)
+    if old_session is None or not old_session.all_joined:
+        await interaction.response.send_message(
+            "Идэвхтэй тоглолт алга. Эхлээд `/matchprep` дуудаарай.",
+            ephemeral=True)
+        return
+    # Хуучин самбар + бэтинг арилгах
+    old_board = _boards.get(interaction.guild_id)
+    if old_board is not None:
+        try:
+            await old_board.edit(view=None)
+        except discord.HTTPException:
+            pass
+    old_bet = _bet_boards.pop(interaction.guild_id, None)
+    if old_bet is not None:
+        try:
+            await old_bet.edit(view=None)
+        except discord.HTTPException:
+            pass
+    _bet_boards_meta.pop(interaction.guild_id, None)
+    _betting.pop(interaction.guild_id, None)
+    # Шинэ session — өмнөх players-уудыг хадгалах
+    saved_players = list(old_session.all_joined)
+    session = MatchSession()
+    session.all_joined = saved_players
+    session._enter_division()  # шууд DIVISION phase-руу
+    _sessions[interaction.guild_id] = session
+    _match_times[interaction.guild_id] = datetime.now(_MN_TZ)
+    embed, view = current_embed_and_view(interaction.guild_id)
+    file = _match_file(interaction.guild_id)
+    if file is not None:
+        await interaction.response.send_message(file=file, view=view)
+    else:
+        await interaction.response.send_message(embed=embed, view=view)
+    _boards[interaction.guild_id] = await interaction.original_response()
+    schedule_save()
+
+
 @bot.tree.command(name="devfill",
                   description="[ТЕСТ] Бүртгэлийг хуурамч тоглогчоор дүүргэх")
 @app_commands.describe(count="Нэмэх хуурамч тоглогчийн тоо")
