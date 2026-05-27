@@ -1,3 +1,6 @@
 discord.py>=2.3.2
 python-dotenv>=1.0.0
 Pillow>=11.0.0
+# Python 3.13-д audioop устгагдсан, discord.py voice-руу импорт хийдэг.
+# audioop-lts нь community-аас гаргасан backport — Python 3.13-д л суулгана.
+audioop-lts; python_version >= "3.13"
