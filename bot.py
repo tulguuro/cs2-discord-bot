@@ -586,7 +586,6 @@ async def setrating(interaction: discord.Interaction,
 
 @bot.tree.command(name="removerating",
                   description="[Admin/Owner] Тоглогчийн үнэлгээг устгах")
-@app_commands.default_permissions(administrator=True)
 @app_commands.describe(member="Үнэлгээг нь устгах гишүүн")
 async def removerating(interaction: discord.Interaction,
                        member: discord.Member):
@@ -679,7 +678,6 @@ async def _dm_backup_state(reason="manual"):
 
 @bot.tree.command(name="restorefile",
                   description="[OWNER] State.json файлаас бүх data-г сэргээх")
-@app_commands.default_permissions(administrator=True)
 @app_commands.describe(state_file="bot_state_*.json (DM backup file)")
 async def restorefile_cmd(interaction: discord.Interaction,
                           state_file: discord.Attachment):
@@ -723,7 +721,6 @@ async def restorefile_cmd(interaction: discord.Interaction,
 
 @bot.tree.command(name="savedata",
                   description="[OWNER] Бүх data-г JSONBin + DM-р backup хийх")
-@app_commands.default_permissions(administrator=True)
 async def savedata_cmd(interaction: discord.Interaction):
     """In-memory state-ыг JSONBin-руу + Owner-ын DM-руу backup явуулна.
 
@@ -776,7 +773,6 @@ async def savedata_cmd(interaction: discord.Interaction):
 
 @bot.tree.command(name="cleardata",
                   description="[OWNER] Бүх rating/bank/debt/channel data-г устгах")
-@app_commands.default_permissions(administrator=True)
 async def cleardata_cmd(interaction: discord.Interaction):
     """Bot-ийн in-memory state бүгдийг цэвэрлэж, json файлуудыг устгана.
 
@@ -913,7 +909,6 @@ _SEED_BANKS = {
 
 @bot.tree.command(name="restore",
                   description="[OWNER] Screenshot-аас алдсан rating/bank data-г сэргээх")
-@app_commands.default_permissions(administrator=True)
 async def restore_cmd(interaction: discord.Interaction):
     """Display name match-р алдсан data-г сэргээнэ. Owner only."""
     if OWNER_ID is None or interaction.user.id != OWNER_ID:
@@ -1130,7 +1125,6 @@ async def setbank(interaction: discord.Interaction,
 @bot.tree.command(name="setuserbank",
                   description="[Admin/Owner] Бусдын дансыг бүртгэх "
                               "(member эхэнд)")
-@app_commands.default_permissions(administrator=True)
 @app_commands.describe(member="Данс бүртгүүлэх гишүүн",
                        bank="Банкны нэр (ж: Хаан банк)",
                        number="Дансны дугаар",
@@ -1463,7 +1457,6 @@ async def matchprep(interaction: discord.Interaction):
 @bot.tree.command(name="remake",
                   description="BO3 дууссаны дараа дахин хуваах — players үлдэнэ "
                               "(admin/owner)")
-@app_commands.default_permissions(administrator=True)
 @app_commands.choices(method=[
     app_commands.Choice(name="🎯 Draft — ахлагч сонгох", value="draft"),
     app_commands.Choice(name="🎲 Random — санамсаргүй", value="random"),
