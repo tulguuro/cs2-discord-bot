@@ -1,8 +1,7 @@
 discord.py>=2.3.2
 python-dotenv>=1.0.0
 Pillow>=11.0.0
-# Python 3.13-д audioop модуль устгагдсан — discord.py voice-руу импорт
-# хийдэг. audioop-lts нь community-аас гаргасан backport (PyPI дээр).
-# Marker-гүй: бүх Python дээр суулгана. <=3.12 дээр стандарт audioop
-# хэрэглэгдэх ба audioop-lts бараг хэрэглэгдэхгүй.
-audioop-lts
+# audioop модуль Python 3.13-д устгагдсан — community backport-ыг
+# Python 3.13+ үед л суулгана. Railway/локалаар 3.11-3.12 хэрэглэвэл
+# стандарт audioop байгаа тул skip хийгдэнэ.
+audioop-lts ; python_version >= "3.13"
